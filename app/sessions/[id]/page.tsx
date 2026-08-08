@@ -10,6 +10,17 @@ import {
   type StepRow,
 } from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
+import { getRedactMode } from "@/lib/mode";
+import {
+  presentBranch,
+  presentPath,
+  presentPr,
+  presentProject,
+  presentText,
+  presentTitle,
+  type RedactMode,
+} from "@/lib/present";
+import { DemoToggle } from "../../demo-toggle";
 import {
   formatDateTime,
   formatDuration,
@@ -45,20 +56,28 @@ export default async function SessionTimelinePage({
   const prs = listSessionPrs(session.id);
   const files = listTouchedFiles(session.id);
   const changed = files.filter((f) => f.writes > 0);
+  const mode = await getRedactMode();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <Link href="/" className="text-sm text-neutral-500 hover:underline">
-        ← 세션 목록
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/" className="text-sm text-neutral-500 hover:underline">
+          ← 세션 목록
+        </Link>
+        <DemoToggle mode={mode} />
+      </div>
 
       <header className="mt-4 mb-8">
         <h1 className="text-xl font-semibold tracking-tight">
-          {session.title ?? session.firstPrompt ?? session.id}
+          {presentTitle(session.title, mode) ??
+            presentText(session.firstPrompt, mode) ??
+            session.id}
         </h1>
         <p className="mt-2 text-sm text-neutral-500">
-          {session.projectName}
-          {session.gitBranch && session.gitBranch !== "HEAD" ? ` · ${session.gitBranch}` : ""} ·{" "}
+          {presentProject(session.projectName, mode)}
+          {session.gitBranch && session.gitBranch !== "HEAD"
+            ? ` · ${presentBranch(session.gitBranch, mode)}`
+            : ""} ·{" "}
           {formatDateTime(session.startedAt)} · {formatDuration(session.durationMs)} ·{" "}
           {session.models.map(shortModel).join(", ") || "모델 정보 없음"}
         </p>
@@ -80,19 +99,26 @@ export default async function SessionTimelinePage({
                 이 세션이 만든 PR {prs.length}개
               </h2>
               <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
-                {prs.map((pr) => (
-                  <li key={pr.url} className="px-4 py-2.5 text-sm">
-                    <a
-                      href={pr.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-medium hover:underline"
-                    >
-                      #{pr.number}
-                    </a>
-                    <span className="ml-2 text-xs text-neutral-500">{pr.repository}</span>
-                  </li>
-                ))}
+                {prs.map((pr, i) => {
+                  const shown = presentPr(pr, mode);
+                  return (
+                    <li key={i} className="px-4 py-2.5 text-sm">
+                      {shown.href ? (
+                        <a
+                          href={shown.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium hover:underline"
+                        >
+                          {shown.label}
+                        </a>
+                      ) : (
+                        <span className="font-medium">{shown.label}</span>
+                      )}
+                      <span className="ml-2 text-xs text-neutral-500">{shown.repository}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -106,13 +132,13 @@ export default async function SessionTimelinePage({
                   : ""}
               </h2>
               <ul className="max-h-56 divide-y divide-neutral-100 overflow-auto rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
-                {changed.map((f) => (
+                {changed.map((f, i) => (
                   <li
-                    key={f.path}
+                    key={i}
                     className="flex items-center justify-between gap-3 px-4 py-2 text-xs"
                   >
-                    <span className="truncate font-mono" title={f.path}>
-                      {f.path.replace(/^.*\/(?=[^/]+\/[^/]+$)/, "…/")}
+                    <span className="truncate font-mono" title={presentPath(f.path, mode)}>
+                      {presentPath(f.path, mode).replace(/^.*\/(?=[^/]+\/[^/]+$)/, "…/")}
                     </span>
                     <span className="shrink-0 tabular-nums text-neutral-500">
                       {f.writes}회 변경
@@ -159,7 +185,7 @@ export default async function SessionTimelinePage({
 
         <ol className="space-y-2">
           {steps.map((step) => (
-            <Step key={step.uuid} step={step} />
+            <Step key={step.uuid} step={step} mode={mode} />
           ))}
         </ol>
 
@@ -171,7 +197,10 @@ export default async function SessionTimelinePage({
   );
 }
 
-function Step({ step }: { step: StepRow }) {
+function Step({ step, mode }: { step: StepRow; mode: RedactMode }) {
+  const text = presentText(step.text, mode);
+  const toolInput = presentText(step.toolInput, mode);
+  const toolResult = presentText(step.toolResult, mode);
   if (step.kind === "system") {
     return (
       <li className="px-3 py-1 text-xs text-neutral-400">
@@ -207,25 +236,29 @@ function Step({ step }: { step: StepRow }) {
         // Opus 5는 기본이 display: omitted라 사고 내용이 빈 문자열로 기록된다
         <p className="text-sm italic text-neutral-400">사고 내용은 로그에 남지 않음</p>
       ) : (
-        step.text && (
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{step.text}</p>
+        text && (
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
         )
       )}
 
       {step.toolInput && (
         <>
           <p className="break-all font-mono text-xs text-neutral-700 dark:text-neutral-300">
-            {toolSummary(step.toolInput)}
+            {mode === "demo"
+              ? step.filePath
+                ? presentPath(step.filePath, mode)
+                : "(데모 모드 · 인자 숨김)"
+              : presentText(toolSummary(step.toolInput), mode)}
           </p>
-          <Collapsible label="인자 전체" body={step.toolInput} />
+          {toolInput && <Collapsible label="인자 전체" body={toolInput} />}
         </>
       )}
 
-      {step.toolResult && (
+      {toolResult && (
         <Collapsible
           label={step.isError ? "에러 출력" : "결과"}
-          body={step.toolResult}
-          preview={step.toolResult.split("\n")[0]?.slice(0, 120)}
+          body={toolResult}
+          preview={toolResult.split("\n")[0]?.slice(0, 120)}
         />
       )}
     </li>

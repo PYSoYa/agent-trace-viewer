@@ -1,7 +1,21 @@
 import Link from "next/link";
 import { indexTraces } from "@/lib/db/indexer";
-import { listProjects, listSessions, prCountsBySession } from "@/lib/db/queries";
+import {
+  listProjects,
+  listSessions,
+  prCountsBySession,
+  resolveProjectKey,
+} from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
+import { getRedactMode } from "@/lib/mode";
+import {
+  presentBranch,
+  presentProject,
+  presentText,
+  presentTitle,
+  projectKey,
+} from "@/lib/present";
+import { DemoToggle } from "./demo-toggle";
 import { promptTokens } from "@/lib/trace/types";
 import {
   formatDateTime,
@@ -24,8 +38,11 @@ export default async function SessionListPage({
 
   const index = await indexTraces();
   const projects = listProjects();
-  const sessions = listSessions(project);
+  // URL에는 불투명 키만 실린다. 실제 슬러그는 여기서만 안다
+  const projectSlug = resolveProjectKey(project);
+  const sessions = listSessions(projectSlug);
   const prCounts = prCountsBySession();
+  const mode = await getRedactMode();
 
   const totalCost = sessions.reduce((sum, s) => sum + s.totalCostUsd, 0);
   const totalOutput = sessions.reduce(
@@ -45,12 +62,15 @@ export default async function SessionListPage({
             {index.scanned}개 파일 스캔 · {index.reindexed}개 재인덱싱 · {index.elapsedMs}ms
           </p>
         </div>
-        <Link
-          href="/stats"
-          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
-        >
-          집계
-        </Link>
+        <div className="flex items-center gap-2">
+          <DemoToggle mode={mode} />
+          <Link
+            href="/stats"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
+          >
+            집계
+          </Link>
+        </div>
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
@@ -68,10 +88,10 @@ export default async function SessionListPage({
         <FilterChip href="/" active={!project} label="전체" />
         {projects.map((p) => (
           <FilterChip
-            key={p.slug}
-            href={`/?project=${encodeURIComponent(p.slug)}`}
-            active={project === p.slug}
-            label={`${p.name} (${p.sessionCount})`}
+            key={projectKey(p.slug)}
+            href={`/?project=${projectKey(p.slug)}`}
+            active={projectSlug === p.slug}
+            label={`${presentProject(p.name, mode)} (${p.sessionCount})`}
           />
         ))}
       </nav>
@@ -109,11 +129,14 @@ export default async function SessionListPage({
                       href={`/sessions/${s.id}`}
                       className="font-medium text-neutral-900 hover:underline dark:text-neutral-100"
                     >
-                      {s.title ?? (s.firstPrompt ? truncate(s.firstPrompt, 60) : s.id.slice(0, 8))}
+                      {presentTitle(s.title, mode) ??
+                        (s.firstPrompt
+                          ? truncate(presentText(s.firstPrompt, mode) ?? "", 60)
+                          : s.id.slice(0, 8))}
                     </Link>
                     <div className="mt-0.5 text-xs text-neutral-500">
                       {s.stepCount} 스텝
-                      {s.gitBranch && s.gitBranch !== "HEAD" ? ` · ${s.gitBranch}` : ""}
+                      {s.gitBranch && s.gitBranch !== "HEAD" ? ` · ${presentBranch(s.gitBranch, mode)}` : ""}
                       {s.subagentCount > 0 ? ` · 서브에이전트 ${s.subagentCount}` : ""}
                       {prCounts.get(s.id) ? (
                         <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
@@ -123,7 +146,7 @@ export default async function SessionListPage({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
-                    {s.projectName}
+                    {presentProject(s.projectName, mode)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-neutral-600 dark:text-neutral-400">
                     {formatDateTime(s.startedAt)}

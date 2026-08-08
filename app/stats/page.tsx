@@ -2,6 +2,9 @@ import Link from "next/link";
 import { listModelStats, listProjectStats, listToolStats } from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
 import { formatPercent, formatTokens, shortModel } from "@/lib/format";
+import { getRedactMode } from "@/lib/mode";
+import { presentProject, projectKey } from "@/lib/present";
+import { DemoToggle } from "../demo-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -9,15 +12,19 @@ export default async function StatsPage() {
   const tools = listToolStats();
   const projects = listProjectStats();
   const models = listModelStats();
+  const mode = await getRedactMode();
 
   const maxToolCalls = Math.max(1, ...tools.map((t) => t.calls));
   const maxProjectCost = Math.max(0.0001, ...projects.map((p) => p.costUsd));
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <Link href="/" className="text-sm text-neutral-500 hover:underline">
-        ← 세션 목록
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/" className="text-sm text-neutral-500 hover:underline">
+          ← 세션 목록
+        </Link>
+        <DemoToggle mode={mode} />
+      </div>
       <h1 className="mt-4 mb-8 text-xl font-semibold tracking-tight">집계</h1>
 
       <section className="mb-10">
@@ -86,15 +93,15 @@ export default async function StatsPage() {
             <tbody>
               {projects.map((p) => (
                 <tr
-                  key={p.slug}
+                  key={projectKey(p.slug)}
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
                   <td className="px-4 py-2.5">
                     <Link
-                      href={`/?project=${encodeURIComponent(p.slug)}`}
+                      href={`/?project=${projectKey(p.slug)}`}
                       className="hover:underline"
                     >
-                      {p.name}
+                      {presentProject(p.name, mode)}
                     </Link>
                   </td>
                   <td className="w-48 px-4 py-2.5">
