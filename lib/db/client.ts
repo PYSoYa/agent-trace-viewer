@@ -75,6 +75,22 @@ CREATE TABLE IF NOT EXISTS session_prs (
   PRIMARY KEY (session_id, pr_url)
 );
 
+/*
+ * 스텝 본문 검색용 인덱스.
+ * steps에서 파생되지만 external content 테이블로 묶지 않았다 — 본문을 그대로 넣지 않고
+ * 길이를 잘라 넣기 때문이다(tool_result 하나가 49만 자까지 나온다).
+ * unicode61은 공백과 구두점에서 끊으므로 한글 어절, 영문, 경로 조각이 모두 잡힌다.
+ */
+CREATE VIRTUAL TABLE IF NOT EXISTS steps_fts USING fts5(
+  body,
+  session_id UNINDEXED,
+  uuid       UNINDEXED,
+  seq        UNINDEXED,
+  kind       UNINDEXED,
+  tool_name  UNINDEXED,
+  tokenize = 'unicode61'
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_started  ON sessions (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_steps_file        ON steps (file_path);
 CREATE INDEX IF NOT EXISTS idx_prs_url           ON session_prs (pr_url);
@@ -88,9 +104,10 @@ CREATE INDEX IF NOT EXISTS idx_steps_session_seq ON steps (session_id, seq);
  * 스키마를 바꿀 때마다 올린다.
  * 이 DB는 jsonl에서 다시 만들 수 있는 캐시라, 버전이 다르면 조용히 어긋난 채로 두는 대신 버리고 새로 만든다.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const DROP_ALL = `
+DROP TABLE IF EXISTS steps_fts;
 DROP TABLE IF EXISTS session_prs;
 DROP TABLE IF EXISTS steps;
 DROP TABLE IF EXISTS sessions;

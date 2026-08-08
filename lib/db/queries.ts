@@ -278,6 +278,101 @@ export function listSubagents(parentId: string): SubagentRow[] {
   }));
 }
 
+export type SearchHit = {
+  sessionId: string;
+  sessionTitle: string | null;
+  projectSlug: string;
+  projectName: string;
+  startedAt: string;
+  uuid: string;
+  seq: number;
+  kind: string;
+  toolName: string | null;
+  /** 일치 부분에 «»가 둘러진 발췌 */
+  snippet: string;
+  /** 타임라인에서 이 스텝이 있는 쪽 번호를 계산하기 위한 순번 */
+  rowIndex: number;
+};
+
+/**
+ * 사용자 입력을 FTS5 질의로 바꾼다.
+ * 날것으로 넘기면 `AND`, `*`, `"` 같은 문자가 문법으로 해석돼 구문 오류가 나거나
+ * 의도하지 않은 검색이 된다. 각 낱말을 따옴표로 감싸 리터럴로 만들고 AND로 잇는다.
+ */
+export function toFtsQuery(input: string): string | null {
+  const terms = input
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    // FTS5 문자열 리터럴에서 "는 ""로 이스케이프한다
+    .map((t) => `"${t.replace(/"/g, '""')}"`);
+  return terms.length ? terms.join(" AND ") : null;
+}
+
+export function searchSteps(input: string, limit = 60): SearchHit[] {
+  const match = toFtsQuery(input);
+  if (!match) return [];
+  const db = getDb();
+  try {
+    const rows = db
+      .prepare(
+        `SELECT f.session_id, f.uuid, f.seq, f.kind, f.tool_name,
+                snippet(steps_fts, 0, '«', '»', '…', 12) AS snippet,
+                (SELECT COUNT(*) FROM steps st
+                  WHERE st.session_id = f.session_id AND st.seq < f.seq) AS row_index,
+                s.title, s.project_slug, s.project_name, s.started_at
+         FROM steps_fts f
+         JOIN sessions s ON s.id = f.session_id
+         WHERE steps_fts MATCH ?
+         ORDER BY bm25(steps_fts), s.started_at DESC
+         LIMIT ?`,
+      )
+      .all(match, limit) as unknown as {
+      session_id: string;
+      uuid: string;
+      seq: number;
+      kind: string;
+      tool_name: string | null;
+      snippet: string;
+      row_index: number;
+      title: string | null;
+      project_slug: string;
+      project_name: string;
+      started_at: string;
+    }[];
+    return rows.map((r) => ({
+      sessionId: r.session_id,
+      sessionTitle: r.title,
+      projectSlug: r.project_slug,
+      projectName: r.project_name,
+      startedAt: r.started_at,
+      uuid: r.uuid,
+      seq: r.seq,
+      kind: r.kind,
+      toolName: r.tool_name,
+      snippet: r.snippet,
+      rowIndex: r.row_index,
+    }));
+  } catch {
+    // 문법상 인정되지 않는 입력은 결과 없음으로 다룬다
+    return [];
+  }
+}
+
+export function countSearchHits(input: string): number {
+  const match = toFtsQuery(input);
+  if (!match) return 0;
+  const db = getDb();
+  try {
+    const row = db
+      .prepare("SELECT COUNT(*) AS n FROM steps_fts WHERE steps_fts MATCH ?")
+      .get(match) as unknown as { n: number };
+    return row.n;
+  } catch {
+    return 0;
+  }
+}
+
 export type SessionPr = {
   number: number;
   url: string;
