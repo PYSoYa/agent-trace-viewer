@@ -57,9 +57,9 @@ export default async function SessionListPage({
     <main className="mx-auto max-w-[1400px] px-6 py-10">
       <header className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">에이전트 트레이스</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Agent traces</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            {index.scanned}개 파일 스캔 · {index.reindexed}개 재인덱싱 · {index.elapsedMs}ms
+            {index.scanned} files scanned · {index.reindexed} reindexed · {index.elapsedMs}ms
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,24 +68,24 @@ export default async function SessionListPage({
             href="/stats"
             className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
           >
-            집계
+            Stats
           </Link>
         </div>
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        <Stat label="세션" value={String(sessions.length)} />
-        <Stat label="비용" value={formatUsd(totalCost)} />
-        <Stat label="출력 토큰" value={formatTokens(totalOutput)} />
+        <Stat label="Sessions" value={String(sessions.length)} />
+        <Stat label="Cost" value={formatUsd(totalCost)} />
+        <Stat label="Output tokens" value={formatTokens(totalOutput)} />
         <Stat
-          label="캐시 히트율"
+          label="Cache hit rate"
           value={totalPrompt ? formatPercent(totalCacheRead / totalPrompt) : "-"}
         />
-        <Stat label="툴 호출" value={formatTokens(totalTools)} />
+        <Stat label="Tool calls" value={formatTokens(totalTools)} />
       </section>
 
       <nav className="mb-6 flex flex-wrap gap-2">
-        <FilterChip href="/" active={!project} label="전체" />
+        <FilterChip href="/" active={!project} label="All" />
         {projects.map((p) => (
           <FilterChip
             key={projectKey(p.slug)}
@@ -98,24 +98,24 @@ export default async function SessionListPage({
 
       {sessions.length === 0 ? (
         <p className="rounded-lg border border-dashed border-neutral-300 p-10 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          인덱싱된 세션이 없습니다. ~/.claude/projects 아래에 jsonl 로그가 있는지 확인하세요.
+          No sessions indexed yet. Check that JSONL logs exist under ~/.claude/projects.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-4 py-3 font-medium">세션</th>
-                <th className="px-4 py-3 font-medium">프로젝트</th>
-                <th className="px-4 py-3 font-medium">시작</th>
+                <th className="px-4 py-3 font-medium">Session</th>
+                <th className="px-4 py-3 font-medium">Project</th>
+                <th className="px-4 py-3 font-medium">Started</th>
                 {/* 첫 기록과 마지막 기록 사이의 벽시계 간격. 세션을 며칠 뒤 이어가면 그만큼 길어진다 */}
-                <th className="px-4 py-3 text-right font-medium">기간</th>
-                <th className="px-4 py-3 font-medium">모델</th>
-                <th className="px-4 py-3 text-right font-medium">출력</th>
-                <th className="px-4 py-3 text-right font-medium">캐시</th>
-                <th className="px-4 py-3 text-right font-medium">툴</th>
-                <th className="px-4 py-3 text-right font-medium">에러</th>
-                <th className="px-4 py-3 text-right font-medium">비용</th>
+                <th className="px-4 py-3 text-right font-medium">Span</th>
+                <th className="px-4 py-3 font-medium">Models</th>
+                <th className="px-4 py-3 text-right font-medium">Output</th>
+                <th className="px-4 py-3 text-right font-medium">Cache</th>
+                <th className="px-4 py-3 text-right font-medium">Tools</th>
+                <th className="px-4 py-3 text-right font-medium">Errors</th>
+                <th className="px-4 py-3 text-right font-medium">Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -135,9 +135,9 @@ export default async function SessionListPage({
                           : s.id.slice(0, 8))}
                     </Link>
                     <div className="mt-0.5 text-xs text-neutral-500">
-                      {s.stepCount} 스텝
+                      {s.stepCount} steps
                       {s.gitBranch && s.gitBranch !== "HEAD" ? ` · ${presentBranch(s.gitBranch, mode)}` : ""}
-                      {s.subagentCount > 0 ? ` · 서브에이전트 ${s.subagentCount}` : ""}
+                      {s.subagentCount > 0 ? ` · ${s.subagentCount} subagents` : ""}
                       {prCounts.get(s.id) ? (
                         <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                           PR {prCounts.get(s.id)}
@@ -177,7 +177,7 @@ export default async function SessionListPage({
                     {formatUsd(s.totalCostUsd)}
                     {s.subagentCount > 0 && (
                       <div className="text-xs font-normal text-neutral-500">
-                        본체 {formatUsd(s.costUsd)}
+                        own {formatUsd(s.costUsd)}
                       </div>
                     )}
                   </td>

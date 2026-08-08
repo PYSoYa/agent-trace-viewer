@@ -53,7 +53,7 @@ const SECRET_RULES: SecretRule[] = [
   },
 ];
 
-const MASK = "‹가림›";
+const MASK = "‹redacted›";
 
 export function redactSecrets(text: string): string {
   let out = text;
@@ -151,12 +151,12 @@ export function anonymizePath(path: string): string {
 export function hideProse(text: string | null): string | null {
   if (text === null) return null;
   if (text.trim() === "") return text;
-  return `(데모 모드 · 본문 ${text.length.toLocaleString()}자 숨김)`;
+  return `(demo mode · ${text.length.toLocaleString()} chars hidden)`;
 }
 
 /** 제목은 길이만 흉내 낸 가명으로 바꾼다 */
 export function anonymizeTitle(title: string): string {
-  return `${pseudonym(title, " ")} 작업`;
+  return `${pseudonym(title, " ")} work`;
 }
 
 /** 화면에 나가는 자유 텍스트에 거는 최종 필터 */

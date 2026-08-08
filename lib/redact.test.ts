@@ -8,7 +8,7 @@ import {
   renderText,
 } from "./redact";
 
-const MASK = "‹가림›";
+const MASK = "‹redacted›";
 
 describe("redactSecrets", () => {
   // 실제 세션 로그에서 발견된 종류들

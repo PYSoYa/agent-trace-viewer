@@ -21,26 +21,26 @@ export default async function StatsPage() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
-          ← 세션 목록
+          ← Sessions
         </Link>
         <DemoToggle mode={mode} />
       </div>
-      <h1 className="mt-4 mb-8 text-xl font-semibold tracking-tight">집계</h1>
+      <h1 className="mt-4 mb-8 text-xl font-semibold tracking-tight">Stats</h1>
 
       <section className="mb-10">
         <h2 className="mb-3 text-sm font-medium text-neutral-500">
-          툴별 사용량과 실패율
+          Tool usage and failure rate
         </h2>
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-4 py-2.5 font-medium">툴</th>
-                <th className="px-4 py-2.5 font-medium">비중</th>
-                <th className="px-4 py-2.5 text-right font-medium">호출</th>
-                <th className="px-4 py-2.5 text-right font-medium">세션</th>
-                <th className="px-4 py-2.5 text-right font-medium">실패</th>
-                <th className="px-4 py-2.5 text-right font-medium">실패율</th>
+                <th className="px-4 py-2.5 font-medium">Tool</th>
+                <th className="px-4 py-2.5 font-medium">Share</th>
+                <th className="px-4 py-2.5 text-right font-medium">Calls</th>
+                <th className="px-4 py-2.5 text-right font-medium">Sessions</th>
+                <th className="px-4 py-2.5 text-right font-medium">Failures</th>
+                <th className="px-4 py-2.5 text-right font-medium">Failure rate</th>
               </tr>
             </thead>
             <tbody>
@@ -75,19 +75,19 @@ export default async function StatsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">프로젝트별 소비</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">Spend by project</h2>
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-4 py-2.5 font-medium">프로젝트</th>
-                <th className="px-4 py-2.5 font-medium">비용 비중</th>
-                <th className="px-4 py-2.5 text-right font-medium">세션</th>
-                <th className="px-4 py-2.5 text-right font-medium">출력</th>
-                <th className="px-4 py-2.5 text-right font-medium">캐시 읽기</th>
-                <th className="px-4 py-2.5 text-right font-medium">툴</th>
-                <th className="px-4 py-2.5 text-right font-medium">에러</th>
-                <th className="px-4 py-2.5 text-right font-medium">비용</th>
+                <th className="px-4 py-2.5 font-medium">Project</th>
+                <th className="px-4 py-2.5 font-medium">Cost share</th>
+                <th className="px-4 py-2.5 text-right font-medium">Sessions</th>
+                <th className="px-4 py-2.5 text-right font-medium">Output</th>
+                <th className="px-4 py-2.5 text-right font-medium">Cache reads</th>
+                <th className="px-4 py-2.5 text-right font-medium">Tools</th>
+                <th className="px-4 py-2.5 text-right font-medium">Errors</th>
+                <th className="px-4 py-2.5 text-right font-medium">Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -131,13 +131,13 @@ export default async function StatsPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">모델별 출력</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">Output by model</h2>
         <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
           {models.map((m) => (
             <li key={m.model} className="flex items-center justify-between px-4 py-2.5 text-sm">
               <span className="font-mono text-xs">{shortModel(m.model)}</span>
               <span className="tabular-nums text-neutral-500">
-                {m.steps.toLocaleString()} 스텝 · {formatTokens(m.outputTokens)} 출력
+                {m.steps.toLocaleString()} steps · {formatTokens(m.outputTokens)} output
               </span>
             </li>
           ))}

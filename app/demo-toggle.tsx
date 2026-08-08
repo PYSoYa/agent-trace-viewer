@@ -10,8 +10,8 @@ export function DemoToggle({ mode }: { mode: RedactMode }) {
         type="submit"
         title={
           on
-            ? "실제 내용을 다시 표시합니다"
-            : "이름을 가명으로 바꾸고 본문을 숨깁니다. 스크린샷용"
+            ? "Show the real values again"
+            : "Replace names with pseudonyms and hide prose. For screenshots."
         }
         className={
           on
@@ -19,7 +19,7 @@ export function DemoToggle({ mode }: { mode: RedactMode }) {
             : "rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
         }
       >
-        {on ? "데모 모드 켜짐" : "데모 모드"}
+        {on ? "Demo mode on" : "Demo mode"}
       </button>
     </form>
   );

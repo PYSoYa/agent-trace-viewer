@@ -239,7 +239,7 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
 function withTruncationNote(value: string | null, fullLength: number | null): string | null {
   if (value === null) return null;
   if (fullLength !== null && fullLength > MAX_TEXT) {
-    return `${value}\n\n… 전체 ${fullLength.toLocaleString()}자 중 ${MAX_TEXT.toLocaleString()}자만 표시`;
+    return `${value}\n\n… showing ${MAX_TEXT.toLocaleString()} of ${fullLength.toLocaleString()} characters`;
   }
   return value;
 }
