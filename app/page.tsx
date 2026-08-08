@@ -37,11 +37,19 @@ export default async function SessionListPage({
 
   return (
     <main className="mx-auto max-w-[1400px] px-6 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">에이전트 트레이스</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {index.scanned}개 파일 스캔 · {index.reindexed}개 재인덱싱 · {index.elapsedMs}ms
-        </p>
+      <header className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">에이전트 트레이스</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {index.scanned}개 파일 스캔 · {index.reindexed}개 재인덱싱 · {index.elapsedMs}ms
+          </p>
+        </div>
+        <Link
+          href="/stats"
+          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
+        >
+          집계
+        </Link>
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">

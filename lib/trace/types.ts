@@ -35,6 +35,7 @@ export function cacheHitRate(u: TokenUsage): number {
 export type StepKind =
   | "user_prompt"
   | "assistant_text"
+  | "thinking"
   | "tool_call"
   | "tool_result"
   | "system";

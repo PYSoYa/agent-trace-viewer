@@ -76,6 +76,12 @@ type Accumulator = {
   steps: TraceStep[];
   /** message.id -> 이미 계상했는지. assistant 한 메시지가 여러 줄로 쪼개져 들어온다 */
   countedMessageIds: Set<string>;
+  /**
+   * message.id -> 아직 스텝에 못 붙인 usage.
+   * usage는 메시지 단위인데 그게 실린 첫 줄이 thinking 블록만 담고 있는 경우가 많아,
+   * 줄 안에서 바로 붙이려 하면 토큰이 통째로 버려진다. 그 메시지의 첫 스텝까지 들고 간다.
+   */
+  pendingUsage: Map<string, TokenUsage>;
   tokens: TokenUsage;
   costUsd: number;
   models: Set<string>;
@@ -93,6 +99,7 @@ function newAccumulator(sessionId: string): Accumulator {
     sessionId,
     steps: [],
     countedMessageIds: new Set(),
+    pendingUsage: new Map(),
     tokens: emptyUsage(),
     costUsd: 0,
     models: new Set(),
@@ -209,23 +216,50 @@ export class ClaudeCodeAdapter implements TraceAdapter {
 
         // 같은 message.id가 여러 줄에 걸쳐 오므로 usage는 한 번만 계상한다
         const messageId = message.id as string | undefined;
-        let usage: TokenUsage | null = null;
         if (messageId && !acc.countedMessageIds.has(messageId)) {
           acc.countedMessageIds.add(messageId);
-          usage = readUsage(message.usage as Record<string, unknown> | undefined);
+          const usage = readUsage(message.usage as Record<string, unknown> | undefined);
           acc.tokens = addUsage(acc.tokens, usage);
           if (model) acc.costUsd += costOf(model, usage, ts);
+          acc.pendingUsage.set(messageId, usage);
         }
+
+        // 이 메시지에서 처음 만들어지는 스텝에만 usage를 붙인다 (스텝 단위 이중 계상 방지)
+        const takeUsage = (): TokenUsage | null => {
+          if (!messageId) return null;
+          const pending = acc.pendingUsage.get(messageId);
+          if (!pending) return null;
+          acc.pendingUsage.delete(messageId);
+          return pending;
+        };
 
         const content = message.content;
         if (!Array.isArray(content)) continue;
 
-        let attachedUsage = usage;
         for (const block of content) {
           if (typeof block !== "object" || block === null) continue;
           const b = block as Record<string, unknown>;
 
-          if (b.type === "text" && typeof b.text === "string") {
+          if (b.type === "thinking") {
+            // display가 omitted면 thinking 텍스트가 빈 문자열로 온다. 스텝 자체는 남긴다
+            acc.steps.push({
+              uuid: `${uuid}#${seq}`,
+              parentUuid,
+              seq: seq++,
+              kind: "thinking",
+              timestamp: ts,
+              model,
+              text: typeof b.thinking === "string" ? b.thinking : "",
+              toolName: null,
+              toolUseId: null,
+              toolInput: null,
+              toolResult: null,
+              isError: false,
+              isSidechain,
+              tokens: takeUsage(),
+              durationMs: null,
+            });
+          } else if (b.type === "text" && typeof b.text === "string") {
             acc.steps.push({
               uuid: `${uuid}#${seq}`,
               parentUuid,
@@ -240,10 +274,9 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               toolResult: null,
               isError: false,
               isSidechain,
-              tokens: attachedUsage,
+              tokens: takeUsage(),
               durationMs: null,
             });
-            attachedUsage = null; // usage는 메시지당 한 스텝에만 붙인다
           } else if (b.type === "tool_use") {
             acc.toolCallCount += 1;
             acc.steps.push({
@@ -260,10 +293,9 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               toolResult: null,
               isError: false,
               isSidechain,
-              tokens: attachedUsage,
+              tokens: takeUsage(),
               durationMs: null,
             });
-            attachedUsage = null;
           }
         }
         continue;
