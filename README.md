@@ -86,12 +86,21 @@ stale cache in place.
 **Everything stays on your machine.** The app makes no network calls; it reads local files
 and serves a local page.
 
-That said, **the timeline renders raw tool output**, and your logs contain whatever your
-agent saw — source code, file paths, command output, and potentially secrets that appeared
-in a terminal. Two consequences worth knowing:
+Your logs contain whatever your agent saw — source code, file paths, command output, and
+secrets that happened to appear in a terminal. Two layers handle that:
 
-- Don't expose the server beyond localhost.
-- Take care with screenshots — there is no redaction mode yet.
+**Secret masking, always on.** Anything shaped like a credential is masked before it
+reaches the page: provider API keys, GitHub tokens, AWS keys, JWTs, `Authorization` headers,
+private key blocks, URL credentials, and `SECRET=`-style assignments. The key name survives
+so you can still tell *what* was hidden. Masking happens at render time — the index keeps
+the original, because it has to stay reproducible from the logs.
+
+**Demo mode, for screenshots.** Toggle it in the header. Project names, repositories,
+branches, titles, and file paths become stable pseudonyms; prose is replaced by its length;
+PR links are dropped. Metrics and structure — token counts, cache hit rate, timings, tool
+names, step shape — are untouched, so the screenshot still shows something real.
+
+Even so: don't expose the server beyond localhost.
 
 The test fixtures in this repository are synthetic. No real session data is committed.
 

@@ -1,4 +1,5 @@
 import { getDb } from "./client";
+import { projectKey } from "../redact";
 import { cacheHitRate, type TokenUsage } from "../trace/types";
 
 export type SessionRow = {
@@ -128,6 +129,19 @@ export function listSessions(projectSlug?: string): SessionRow[] {
   return (rows as unknown as RawSession[]).map(toRow);
 }
 
+/**
+ * URL에 실린 불투명 키를 실제 슬러그로 되돌린다.
+ * 프로젝트 수가 많지 않아 전부 훑어도 된다.
+ */
+export function resolveProjectKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  const db = getDb();
+  const rows = db.prepare("SELECT DISTINCT project_slug FROM sessions").all() as unknown as {
+    project_slug: string;
+  }[];
+  return rows.find((r) => projectKey(r.project_slug) === key)?.project_slug;
+}
+
 export type StepRow = {
   uuid: string;
   seq: number;
@@ -136,6 +150,7 @@ export type StepRow = {
   model: string | null;
   text: string | null;
   toolName: string | null;
+  filePath: string | null;
   toolInput: string | null;
   toolResult: string | null;
   isError: boolean;
@@ -170,7 +185,7 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
     .prepare(
       `SELECT uuid, seq, kind, timestamp, model,
               substr(text, 1, ${MAX_TEXT})        AS text,
-              tool_name,
+              tool_name, file_path,
               substr(tool_input, 1, ${MAX_TEXT})  AS tool_input,
               substr(tool_result, 1, ${MAX_TEXT}) AS tool_result,
               LENGTH(text)        AS text_len,
@@ -187,6 +202,7 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
     model: string | null;
     text: string | null;
     tool_name: string | null;
+    file_path: string | null;
     tool_input: string | null;
     tool_result: string | null;
     text_len: number | null;
@@ -210,6 +226,7 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
       model: r.model,
       text: withTruncationNote(r.text, r.text_len),
       toolName: r.tool_name,
+      filePath: r.file_path,
       toolInput: withTruncationNote(r.tool_input, r.tool_input_len),
       toolResult: withTruncationNote(r.tool_result, r.tool_result_len),
       isError: r.is_error === 1,
@@ -222,7 +239,7 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
 function withTruncationNote(value: string | null, fullLength: number | null): string | null {
   if (value === null) return null;
   if (fullLength !== null && fullLength > MAX_TEXT) {
-    return `${value}\n\n… 전체 ${fullLength.toLocaleString()}자 중 ${MAX_TEXT.toLocaleString()}자만 표시`;
+    return `${value}\n\n… showing ${MAX_TEXT.toLocaleString()} of ${fullLength.toLocaleString()} characters`;
   }
   return value;
 }

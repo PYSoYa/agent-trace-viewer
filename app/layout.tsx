@@ -13,14 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "에이전트 트레이스 뷰어",
-  description: "에이전트 세션의 토큰·비용·툴 호출을 인덱싱해 보여주는 로컬 뷰어",
+  title: "Agent Trace Viewer",
+  description: "A local viewer for coding-agent session logs — tokens, cost, tool calls, and the work they produced.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="ko"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

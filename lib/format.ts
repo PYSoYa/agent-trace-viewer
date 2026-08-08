@@ -7,12 +7,12 @@ export function formatTokens(n: number): string {
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const sec = Math.round(ms / 1000);
-  if (sec < 60) return `${sec}초`;
+  if (sec < 60) return `${sec}s`;
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}분`;
+  if (min < 60) return `${min}m`;
   const hr = Math.floor(min / 60);
   const restMin = min % 60;
-  return restMin ? `${hr}시간 ${restMin}분` : `${hr}시간`;
+  return restMin ? `${hr}h ${restMin}m` : `${hr}h`;
 }
 
 export function formatDateTime(iso: string): string {
