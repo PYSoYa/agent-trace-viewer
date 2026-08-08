@@ -65,6 +65,12 @@ export default async function SessionListPage({
         <div className="flex items-center gap-2">
           <DemoToggle mode={mode} />
           <Link
+            href="/search"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
+          >
+            Search
+          </Link>
+          <Link
             href="/stats"
             className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-400 dark:border-neutral-700"
           >

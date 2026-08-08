@@ -1,6 +1,6 @@
 import { ClaudeCodeAdapter } from "../trace/adapters/claude-code";
 import type { TraceAdapter, TraceFile } from "../trace/adapter";
-import type { ParsedTrace } from "../trace/types";
+import type { ParsedTrace, TraceStep } from "../trace/types";
 import { getDb } from "./client";
 
 const ADAPTERS: TraceAdapter[] = [new ClaudeCodeAdapter()];
@@ -82,6 +82,7 @@ function deleteFile(path: string): void {
   try {
     const staleSessions = "SELECT id FROM sessions WHERE file_path = ?";
     db.prepare(`DELETE FROM steps WHERE session_id IN (${staleSessions})`).run(path);
+    db.prepare(`DELETE FROM steps_fts WHERE session_id IN (${staleSessions})`).run(path);
     db.prepare(`DELETE FROM session_prs WHERE session_id IN (${staleSessions})`).run(path);
     db.prepare("DELETE FROM sessions WHERE file_path = ?").run(path);
     db.prepare("DELETE FROM indexed_files WHERE path = ?").run(path);
@@ -90,6 +91,21 @@ function deleteFile(path: string): void {
     db.exec("ROLLBACK");
     throw err;
   }
+}
+
+/**
+ * 검색 인덱스에 넣을 본문.
+ * tool_result 하나가 49만 자까지 나오므로 잘라 넣는다 — 인덱스 크기를 통제하고,
+ * 어차피 뒷부분까지 읽어야 하는 검색은 드물다.
+ */
+const MAX_INDEXED_CHARS = 20_000;
+
+function searchBody(step: TraceStep): string | null {
+  const parts = [step.text, step.toolInput, step.toolResult].filter(
+    (v): v is string => typeof v === "string" && v.trim() !== "",
+  );
+  if (parts.length === 0) return null;
+  return parts.join("\n").slice(0, MAX_INDEXED_CHARS);
 }
 
 function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
@@ -117,11 +133,17 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
     VALUES (?,?,?,?,?)
   `);
 
+  const insertFts = db.prepare(`
+    INSERT INTO steps_fts (body, session_id, uuid, seq, kind, tool_name)
+    VALUES (?,?,?,?,?,?)
+  `);
+
   db.exec("BEGIN");
   try {
     // 재인덱싱이므로 이 파일이 만들었던 이전 결과부터 지운다
     const staleSessions = "SELECT id FROM sessions WHERE file_path = ?";
     db.prepare(`DELETE FROM steps WHERE session_id IN (${staleSessions})`).run(file.path);
+    db.prepare(`DELETE FROM steps_fts WHERE session_id IN (${staleSessions})`).run(file.path);
     db.prepare(`DELETE FROM session_prs WHERE session_id IN (${staleSessions})`).run(file.path);
     db.prepare("DELETE FROM sessions WHERE file_path = ?").run(file.path);
 
@@ -177,6 +199,11 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
           step.tokens?.cacheRead ?? null,
           step.durationMs,
         );
+
+        const body = searchBody(step);
+        if (body) {
+          insertFts.run(body, s.id, step.uuid, step.seq, step.kind, step.toolName);
+        }
       }
 
       for (const pr of prLinks) {

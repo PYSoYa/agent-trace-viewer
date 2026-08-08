@@ -24,6 +24,8 @@ It is not a quota meter. It answers the other question: **where did all of that 
   spot failed calls, and drill into subagent traces.
 - **Outcome tracking** — the PRs a session opened and the files it actually changed. This
   is what turns a log into a record of work.
+- **Full-text search** — search across prompts, tool arguments, and tool output. Ranked by
+  relevance, with highlighted snippets that link straight to the step in its timeline.
 - **Aggregates** — tool usage and per-tool failure rate, spend by project, output by model.
 
 Cost is computed from per-model rates including the cache multipliers (5-minute cache
@@ -97,7 +99,7 @@ the original, because it has to stay reproducible from the logs.
 
 **Demo mode, for screenshots.** Toggle it in the header. Project names, repositories,
 branches, titles, and file paths become stable pseudonyms; prose is replaced by its length;
-PR links are dropped. Metrics and structure — token counts, cache hit rate, timings, tool
+PR links are dropped; search snippets are withheld. Metrics and structure — token counts, cache hit rate, timings, tool
 names, step shape — are untouched, so the screenshot still shows something real.
 
 Even so: don't expose the server beyond localhost.
@@ -118,6 +120,12 @@ app/             Next.js App Router pages
 
 Indexing is incremental: a file is re-parsed only when its mtime or size changes, so
 starting the app with tens of megabytes of logs costs milliseconds after the first run.
+
+Search uses SQLite's built-in FTS5 with the `unicode61` tokenizer, which splits on
+whitespace and punctuation — so English words, path fragments, and space-separated Korean
+all match. Queries run in single-digit milliseconds over ~13k indexed steps. User input is
+never passed to FTS5 as syntax: each word is quoted and joined with `AND`, so searching for
+`AND` or `build*` finds those literal strings.
 
 Parsing sits behind a `TraceAdapter` interface, so another agent's log format needs only a
 new adapter, not changes to the indexer or the UI.
