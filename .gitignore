@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 로컬 인덱스 DB (사용자 트레이스 원본 파생물 — 커밋 금지)
+.data/
