@@ -3,13 +3,17 @@
 **See what your coding agents actually did** — tokens, cost, tool calls, and the pull
 requests and files they produced.
 
-Claude Code already writes a complete record of every session to
-`~/.claude/projects/**/*.jsonl`: your prompts, every tool call and its raw output,
-per-model token usage including cache reads and writes, and links to the PRs it opened.
-There is just no way to read any of it.
+Claude Code and Codex both write a complete record of every session to disk: your prompts,
+every tool call and its raw output, per-model token usage including cache reads, and — for
+Claude Code — links to the PRs it opened. There is just no way to read any of it.
 
 This is a local viewer for those logs. It adds **no instrumentation** to your agent — it
 only reads what is already on disk.
+
+| Agent | Log location |
+|---|---|
+| Claude Code | `~/.claude/projects/**/*.jsonl` |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl` |
 
 It is not a quota meter. It answers the other question: **where did all of that go?**
 
@@ -79,7 +83,8 @@ Both are optional; the defaults work for a normal Claude Code install.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CLAUDE_PROJECTS_DIR` | `~/.claude/projects` | Where to read session logs from |
+| `CLAUDE_PROJECTS_DIR` | `~/.claude/projects` | Where to read Claude Code logs from |
+| `CODEX_SESSIONS_DIR` | `~/.codex/sessions` | Where to read Codex logs from |
 | `TRACE_DATA_DIR` | `./.data` | Where to keep the parsed index |
 
 The index is a cache. Delete it and it rebuilds from the logs. When the schema changes the
@@ -132,8 +137,16 @@ all match. Queries run in single-digit milliseconds over ~13k indexed steps. Use
 never passed to FTS5 as syntax: each word is quoted and joined with `AND`, so searching for
 `AND` or `build*` finds those literal strings.
 
-Parsing sits behind a `TraceAdapter` interface, so another agent's log format needs only a
-new adapter, not changes to the indexer or the UI.
+Parsing sits behind a `TraceAdapter` interface. Claude Code and Codex are two adapters
+against the same normalized model; another agent's format needs only a third adapter, not
+changes to the indexer, the search index, or the UI.
+
+Codex rollout files reach 280 MB, so that adapter streams line by line rather than reading
+the file into memory.
+
+**Cost is never invented.** Rates live in `lib/pricing.ts` for the Anthropic and OpenAI
+models these agents use. A model with no entry shows `—`, not `$0` and not a guess — a
+wrong money number is worse than a missing one. Add a rate and it starts computing.
 
 ---
 
@@ -153,6 +166,10 @@ of a message, and that line almost always contains only a `thinking` block. A pa
 handles just `text` and `tool_use` drops that line, and the usage with it — losing about
 68% of all output tokens. Keep thinking blocks as steps, and carry the usage forward to
 whichever step comes first.
+
+**Codex counts cached tokens differently.** Its `cached_input_tokens` is a *subset* of
+`input_tokens`, where Anthropic reports cache reads as a separate bucket. Copying the
+fields across without subtracting counts the cached portion twice.
 
 **Subagents share their parent's `sessionId`.** Subagent traces live in a separate file at
 `<session-id>/subagents/agent-*.jsonl`, but the `sessionId` inside is the parent's. Keying

@@ -1,9 +1,10 @@
 import { ClaudeCodeAdapter } from "../trace/adapters/claude-code";
+import { CodexAdapter } from "../trace/adapters/codex";
 import type { TraceAdapter, TraceFile } from "../trace/adapter";
 import type { ParsedTrace, TraceStep } from "../trace/types";
 import { getDb } from "./client";
 
-const ADAPTERS: TraceAdapter[] = [new ClaudeCodeAdapter()];
+const ADAPTERS: TraceAdapter[] = [new ClaudeCodeAdapter(), new CodexAdapter()];
 
 export type IndexResult = {
   scanned: number;
@@ -116,8 +117,8 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
       id, parent_session_id, agent_id, source, project_slug, project_name, file_path, cwd, git_branch,
       title, first_prompt, started_at, ended_at, duration_ms, active_ms, models,
       input_tokens, output_tokens, cache_write_5m, cache_write_1h, cache_read,
-      cost_usd, tool_call_count, error_count, step_count
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      cost_usd, unpriced_models, tool_call_count, error_count, step_count
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
   const insertStep = db.prepare(`
@@ -171,6 +172,7 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
         s.tokens.cacheWrite1h,
         s.tokens.cacheRead,
         s.costUsd,
+        JSON.stringify(s.unpricedModels),
         s.toolCallCount,
         s.errorCount,
         s.stepCount,

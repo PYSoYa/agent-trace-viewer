@@ -29,7 +29,7 @@ describe("costOf", () => {
 
     test("캐시 읽기는 입력 단가의 0.1배", () => {
       const cost = costOf("claude-opus-5", usage({ cacheRead: 1_000_000 }), AT);
-      assert.ok(Math.abs(cost - 0.5) < 1e-9);
+      assert.ok(cost !== null && Math.abs(cost - 0.5) < 1e-9);
     });
   });
 
@@ -40,7 +40,7 @@ describe("costOf", () => {
       usage({ input: 15, output: 150, cacheWrite5m: 280, cacheRead: 3000 }),
       AT,
     );
-    assert.ok(Math.abs(cost - 0.007075) < 1e-9, `계산값 ${cost}`);
+    assert.ok(cost !== null && Math.abs(cost - 0.007075) < 1e-9, `계산값 ${cost}`);
   });
 
   describe("프로모션 단가", () => {
@@ -70,10 +70,37 @@ describe("costOf", () => {
     });
   });
 
-  test("모르는 모델도 0원으로 떨어뜨리지 않는다", () => {
-    // 조용히 0이 되면 비용이 새는 걸 눈치채지 못한다
+  test("모르는 모델은 비용을 지어내지 않고 모름으로 둔다", () => {
+    // 0으로 두면 비용이 새는 걸 못 보고, 아무 단가나 쓰면 틀린 값을 사실처럼 보여준다.
+    // 다른 제공자 모델이 들어오면서 후자가 실제 위험이 됐다
     assert.equal(isKnownModel("claude-future-9"), false);
-    assert.ok(costOf("claude-future-9", usage({ output: 1_000_000 }), AT) > 0);
+    assert.equal(costOf("claude-future-9", usage({ output: 1_000_000 }), AT), null);
+    assert.equal(costOf("some-unreleased-model", usage({ input: 999 }), AT), null);
+  });
+
+  describe("OpenAI 모델 (Codex)", () => {
+    test("gpt-5.5 입력·출력 단가", () => {
+      assert.equal(costOf("gpt-5.5", usage({ input: 1_000_000 }), AT), 5);
+      assert.equal(costOf("gpt-5.5", usage({ output: 1_000_000 }), AT), 30);
+    });
+
+    test("gpt-5.4는 5.5의 정확히 절반", () => {
+      assert.equal(costOf("gpt-5.4", usage({ input: 1_000_000 }), AT), 2.5);
+      assert.equal(costOf("gpt-5.4", usage({ output: 1_000_000 }), AT), 15);
+    });
+
+    test("gpt-5.4-mini", () => {
+      assert.equal(costOf("gpt-5.4-mini", usage({ input: 1_000_000 }), AT), 0.75);
+      assert.equal(costOf("gpt-5.4-mini", usage({ output: 1_000_000 }), AT), 4.5);
+    });
+
+    test("캐시 입력은 입력의 0.1배 — Anthropic과 배수가 같다", () => {
+      // 공식 표의 캐시 단가($0.5 / $0.25 / $0.075)와 일치하는지 확인한다
+      const c = (m: string) => costOf(m, usage({ cacheRead: 1_000_000 }), AT);
+      assert.ok(Math.abs((c("gpt-5.5") ?? 0) - 0.5) < 1e-9);
+      assert.ok(Math.abs((c("gpt-5.4") ?? 0) - 0.25) < 1e-9);
+      assert.ok(Math.abs((c("gpt-5.4-mini") ?? 0) - 0.075) < 1e-9);
+    });
   });
 
   test("사용량이 없으면 0원", () => {

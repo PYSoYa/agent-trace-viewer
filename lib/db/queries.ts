@@ -5,6 +5,7 @@ import { cacheHitRate, type TokenUsage } from "../trace/types";
 export type SessionRow = {
   id: string;
   agentId: string | null;
+  source: string;
   projectSlug: string;
   projectName: string;
   gitBranch: string | null;
@@ -18,6 +19,7 @@ export type SessionRow = {
   tokens: TokenUsage;
   cacheHitRate: number;
   costUsd: number;
+  unpricedModels: string[];
   toolCallCount: number;
   errorCount: number;
   stepCount: number;
@@ -32,6 +34,7 @@ export type SessionRow = {
 type RawSession = {
   id: string;
   agent_id: string | null;
+  source: string;
   project_slug: string;
   project_name: string;
   git_branch: string | null;
@@ -47,6 +50,7 @@ type RawSession = {
   cache_write_1h: number;
   cache_read: number;
   cost_usd: number;
+  unpriced_models: string;
   tool_call_count: number;
   error_count: number;
   step_count: number;
@@ -54,6 +58,16 @@ type RawSession = {
   subagent_cost: number;
   subagent_output: number;
 };
+
+function parseJsonArray(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function toRow(r: RawSession): SessionRow {
   const tokens: TokenUsage = {
@@ -63,15 +77,11 @@ function toRow(r: RawSession): SessionRow {
     cacheWrite1h: r.cache_write_1h,
     cacheRead: r.cache_read,
   };
-  let models: string[] = [];
-  try {
-    models = JSON.parse(r.models) as string[];
-  } catch {
-    models = [];
-  }
+  const models = parseJsonArray(r.models);
   return {
     id: r.id,
     agentId: r.agent_id,
+    source: r.source,
     projectSlug: r.project_slug,
     projectName: r.project_name,
     gitBranch: r.git_branch,
@@ -84,6 +94,7 @@ function toRow(r: RawSession): SessionRow {
     tokens,
     cacheHitRate: cacheHitRate(tokens),
     costUsd: r.cost_usd,
+    unpricedModels: parseJsonArray(r.unpriced_models),
     toolCallCount: r.tool_call_count,
     errorCount: r.error_count,
     stepCount: r.step_count,
@@ -96,10 +107,10 @@ function toRow(r: RawSession): SessionRow {
 
 /** 서브에이전트 합계를 부모 행에 붙인 공통 SELECT. WHERE는 호출부에서 만든다 */
 const SELECT_BASE = `
-  SELECT s.id, s.agent_id, s.project_slug, s.project_name, s.git_branch, s.title, s.first_prompt,
+  SELECT s.id, s.agent_id, s.source, s.project_slug, s.project_name, s.git_branch, s.title, s.first_prompt,
          s.started_at, s.duration_ms, s.active_ms, s.models,
          s.input_tokens, s.output_tokens, s.cache_write_5m, s.cache_write_1h, s.cache_read,
-         s.cost_usd, s.tool_call_count, s.error_count, s.step_count,
+         s.cost_usd, s.unpriced_models, s.tool_call_count, s.error_count, s.step_count,
          COALESCE(sub.n, 0)    AS subagent_count,
          COALESCE(sub.cost, 0) AS subagent_cost,
          COALESCE(sub.out, 0)  AS subagent_output
@@ -120,14 +131,19 @@ const SELECT_BASE = `
 const TOP_LEVEL = `(s.parent_session_id IS NULL
    OR s.parent_session_id NOT IN (SELECT id FROM sessions))`;
 
-export function listSessions(projectSlug?: string): SessionRow[] {
+/**
+ * 프로젝트는 이름으로 묶는다.
+ * 같은 저장소라도 Claude Code는 경로 슬러그를, Codex는 cwd를 쓰기 때문에
+ * 슬러그로 나누면 한 프로젝트가 소스별로 쪼개져 보인다.
+ */
+export function listSessions(projectName?: string): SessionRow[] {
   const db = getDb();
-  const rows = projectSlug
+  const rows = projectName
     ? db
         .prepare(
-          `${SELECT_BASE} WHERE ${TOP_LEVEL} AND s.project_slug = ? ORDER BY s.started_at DESC`,
+          `${SELECT_BASE} WHERE ${TOP_LEVEL} AND s.project_name = ? ORDER BY s.started_at DESC`,
         )
-        .all(projectSlug)
+        .all(projectName)
     : db.prepare(`${SELECT_BASE} WHERE ${TOP_LEVEL} ORDER BY s.started_at DESC`).all();
   return (rows as unknown as RawSession[]).map(toRow);
 }
@@ -139,10 +155,10 @@ export function listSessions(projectSlug?: string): SessionRow[] {
 export function resolveProjectKey(key: string | undefined): string | undefined {
   if (!key) return undefined;
   const db = getDb();
-  const rows = db.prepare("SELECT DISTINCT project_slug FROM sessions").all() as unknown as {
-    project_slug: string;
+  const rows = db.prepare("SELECT DISTINCT project_name FROM sessions").all() as unknown as {
+    project_name: string;
   }[];
-  return rows.find((r) => projectKey(r.project_slug) === key)?.project_slug;
+  return rows.find((r) => projectKey(r.project_name) === key)?.project_name;
 }
 
 export type StepRow = {
@@ -508,7 +524,6 @@ export function listModelStats(): ModelStat[] {
 }
 
 export type ProjectStat = {
-  slug: string;
   name: string;
   sessions: number;
   costUsd: number;
@@ -523,15 +538,14 @@ export function listProjectStats(): ProjectStat[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT project_slug,
-              MIN(project_name) AS project_name,
+      `SELECT project_name,
               SUM(CASE WHEN parent_session_id IS NULL THEN 1 ELSE 0 END) AS sessions,
               SUM(cost_usd)        AS cost_usd,
               SUM(output_tokens)   AS output_tokens,
               SUM(cache_read)      AS cache_read,
               SUM(tool_call_count) AS tool_calls,
               SUM(error_count)     AS errors
-       FROM sessions GROUP BY project_slug ORDER BY cost_usd DESC`,
+       FROM sessions GROUP BY project_name ORDER BY cost_usd DESC`,
     )
     .all() as unknown as {
     project_slug: string;
@@ -544,7 +558,6 @@ export function listProjectStats(): ProjectStat[] {
     errors: number;
   }[];
   return rows.map((r) => ({
-    slug: r.project_slug,
     name: r.project_name,
     sessions: r.sessions,
     costUsd: r.cost_usd ?? 0,
@@ -555,8 +568,20 @@ export function listProjectStats(): ProjectStat[] {
   }));
 }
 
+export type SourceSummary = { source: string; sessions: number };
+
+export function listSources(): SourceSummary[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT source, COUNT(*) AS n FROM sessions
+       WHERE parent_session_id IS NULL GROUP BY source ORDER BY n DESC`,
+    )
+    .all() as unknown as { source: string; n: number }[];
+  return rows.map((r) => ({ source: r.source, sessions: r.n }));
+}
+
 export type ProjectSummary = {
-  slug: string;
   name: string;
   sessionCount: number;
   costUsd: number;
@@ -566,20 +591,17 @@ export function listProjects(): ProjectSummary[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT project_slug,
-              MIN(project_name) AS project_name,
+      `SELECT project_name,
               SUM(CASE WHEN parent_session_id IS NULL THEN 1 ELSE 0 END) AS session_count,
               SUM(cost_usd) AS cost_usd
-       FROM sessions GROUP BY project_slug ORDER BY cost_usd DESC`,
+       FROM sessions GROUP BY project_name ORDER BY cost_usd DESC`,
     )
     .all() as unknown as {
-    project_slug: string;
     project_name: string;
     session_count: number;
     cost_usd: number;
   }[];
   return rows.map((r) => ({
-    slug: r.project_slug,
     name: r.project_name,
     sessionCount: r.session_count,
     costUsd: r.cost_usd ?? 0,
