@@ -5,12 +5,19 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     volumes:
-      # Your Claude Code logs, mounted read-only — the viewer never writes here.
+      # Your agent logs, mounted read-only — the viewer never writes here.
       - ${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}:/claude-projects:ro
+      # Only the Codex session logs and their name index. `~/.codex` as a whole is
+      # deliberately not mounted: it holds auth.json, and reading traces is no reason
+      # to hand credentials to the container.
+      - ${CODEX_SESSIONS_DIR:-${HOME}/.codex/sessions}:/codex-sessions:ro
+      - ${CODEX_SESSION_INDEX:-${HOME}/.codex/session_index.jsonl}:/codex-session-index.jsonl:ro
       # The parsed index. Delete this volume to force a full re-parse.
       - trace-index:/data
     environment:
       CLAUDE_PROJECTS_DIR: /claude-projects
+      CODEX_SESSIONS_DIR: /codex-sessions
+      CODEX_SESSION_INDEX: /codex-session-index.jsonl
       TRACE_DATA_DIR: /data
     restart: unless-stopped
 

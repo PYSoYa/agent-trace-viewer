@@ -74,8 +74,12 @@ load; there is nothing to configure.
 docker compose up --build
 ```
 
-Open http://localhost:3000. Compose mounts `~/.claude/projects` **read-only** and keeps the
-parsed index in a named volume.
+Open http://localhost:3000. Compose mounts your agent logs **read-only** and keeps the
+parsed index in a named volume, so a restart re-parses only what changed.
+
+`~/.codex` is deliberately *not* mounted as a whole — it contains `auth.json`, and reading
+traces is no reason to hand credentials to a container. Only the session directory and its
+name index go in.
 
 To point at logs somewhere else, or to use a different port:
 
@@ -93,6 +97,7 @@ Both are optional; the defaults work for a normal Claude Code install.
 |---|---|---|
 | `CLAUDE_PROJECTS_DIR` | `~/.claude/projects` | Where to read Claude Code logs from |
 | `CODEX_SESSIONS_DIR` | `~/.codex/sessions` | Where to read Codex logs from |
+| `CODEX_SESSION_INDEX` | `~/.codex/session_index.jsonl` | Codex's session-name index |
 | `TRACE_DATA_DIR` | `./.data` | Where to keep the parsed index |
 
 The index is a cache. Delete it and it rebuilds from the logs. When the schema changes the

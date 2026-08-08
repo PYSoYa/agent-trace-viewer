@@ -18,8 +18,15 @@ import {
 const DEFAULT_SESSIONS_DIR =
   process.env.CODEX_SESSIONS_DIR || join(homedir(), ".codex", "sessions");
 
-/** Codex가 세션마다 붙인 이름. 첫 프롬프트보다 훨씬 읽기 좋다 */
-const SESSION_INDEX = join(DEFAULT_SESSIONS_DIR, "..", "session_index.jsonl");
+/*
+ * Codex가 세션마다 붙인 이름. 첫 프롬프트보다 훨씬 읽기 좋다.
+ *
+ * 경로를 따로 열어둔 이유: 컨테이너에는 ~/.codex를 통째로 붙이지 않는다.
+ * 그 안에 auth.json이 있어서, 로그를 보려고 자격증명까지 들여보낼 이유가 없다.
+ * sessions 디렉터리와 이 파일만 각각 읽기 전용으로 마운트한다.
+ */
+const SESSION_INDEX =
+  process.env.CODEX_SESSION_INDEX || join(DEFAULT_SESSIONS_DIR, "..", "session_index.jsonl");
 
 /** IDE가 끼워 넣는 머리말. 사용자가 친 프롬프트가 아니다 */
 const IDE_PROMPT_PREFIXES = ["# Context from my IDE setup", "<user_instructions>", "<environment_context>"];
