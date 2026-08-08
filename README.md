@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# agent-trace-viewer
 
-## Getting Started
+에이전트 세션 로그를 읽어 **뭘 하느라 토큰을 썼는지** 보여주는 로컬 뷰어.
 
-First, run the development server:
+Claude Code는 세션마다 `~/.claude/projects/**/*.jsonl`에 전체 실행 기록을 남긴다.
+프롬프트, 툴 호출과 그 결과 원문, 모델별 토큰(캐시 read/write 포함), 파일 변경까지 전부 들어 있는데
+정작 그걸 읽을 방법이 없다. 이 프로젝트는 **계측 코드를 한 줄도 추가하지 않고**
+이미 쌓여 있는 로그만으로 세션 단위 비용·툴 사용·실패 지점을 집계한다.
+
+남은 사용량을 보는 도구가 아니라, **쓴 사용량의 내역**을 보는 도구다.
+
+## 화면
+
+- **세션 목록** — 프로젝트/브랜치별로 소요 기간, 토큰, 캐시 히트율, 툴 호출 수, 에러 수, 비용
+- **세션 타임라인** *(작업 예정)* — 프롬프트 → 툴 호출 → 결과 스텝 체인, 스텝별 지연·토큰, 에러 하이라이트
+
+## 실행
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`~/.claude/projects` 아래 jsonl을 자동으로 찾아 인덱싱한다. 별도 설정은 없다.
+인덱스는 `.data/traces.db`(gitignore)에 저장되고, 파일 mtime·크기가 바뀐 것만 다시 파싱한다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 구조
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+lib/trace/     어댑터 중립 트레이스 모델 + TraceAdapter 인터페이스
+  adapters/    claude-code.ts — jsonl 파서 (첫 구현)
+lib/db/        node:sqlite 기반 증분 인덱서와 조회
+lib/pricing.ts 모델별 단가와 캐시 배수
+app/           Next.js App Router 화면
+```
 
-## Learn More
+파서는 `TraceAdapter` 뒤에 있어서, 다른 에이전트 로그(Codex 등)는 어댑터만 추가하면 붙는다.
+SQLite는 Node 내장 `node:sqlite`를 써서 네이티브 의존성이 없다.
 
-To learn more about Next.js, take a look at the following resources:
+## 로그 파싱에서 주의한 것
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+실제 데이터를 넣어보고 나서야 드러난 두 가지.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**assistant 메시지는 여러 줄로 쪼개져 있다.** 한 응답이 `message.id`를 공유하는 최대 4줄로 나뉘어
+기록되고, 각 줄이 **같은 usage 객체를 그대로 반복**한다. 줄 단위로 더하면 토큰이 2.5배 부풀려진다
+(검증 세션 실제 output 220,981 → 순진하게 합산 시 550,600). `message.id` 기준으로 중복을 제거한다.
 
-## Deploy on Vercel
+**서브에이전트는 부모와 sessionId가 같다.** 서브에이전트 로그는
+`<세션ID>/subagents/agent-*.jsonl`에 따로 저장되는데 내부 `sessionId`가 부모와 동일해서,
+그대로 넣으면 기본키 충돌로 부모 세션 행을 덮어쓴다. 합성 ID와 `parent_session_id`로 분리하고
+목록에서는 부모 비용에 롤업한다.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 상태
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+세션 목록까지 동작한다. 실제 로그 21개 파일(62MB) 기준 세션 21개·스텝 12,820개가 인덱싱된다.
+세션 타임라인 화면은 작업 예정.
