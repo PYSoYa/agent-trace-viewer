@@ -29,14 +29,16 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    # Mount the host's Claude Code logs here, read-only.
+    # Mount the host's agent logs here, read-only.
     CLAUDE_PROJECTS_DIR=/claude-projects \
+    CODEX_SESSIONS_DIR=/codex-sessions \
+    CODEX_SESSION_INDEX=/codex-session-index.jsonl \
     # Index lives on a volume so it survives restarts.
     TRACE_DATA_DIR=/data
 
 RUN addgroup -g 1001 -S nodejs \
  && adduser -u 1001 -S nextjs -G nodejs \
- && mkdir -p /data /claude-projects \
+ && mkdir -p /data /claude-projects /codex-sessions \
  && chown -R nextjs:nodejs /data
 
 # `output: "standalone"` emits a self-contained server plus only the
