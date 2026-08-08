@@ -13,7 +13,7 @@ import {
   type TraceStep,
 } from "../types";
 
-const PROJECTS_DIR = join(homedir(), ".claude", "projects");
+const DEFAULT_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /** 사용자가 실제로 친 프롬프트가 아니라 CLI가 끼워 넣은 메타 텍스트 */
 const META_PROMPT_PREFIXES = [
@@ -116,17 +116,20 @@ function newAccumulator(sessionId: string): Accumulator {
 export class ClaudeCodeAdapter implements TraceAdapter {
   readonly source = "claude-code";
 
+  /** rootDir는 테스트에서 픽스처 트리를 가리키려고 주입한다 */
+  constructor(private readonly rootDir: string = DEFAULT_PROJECTS_DIR) {}
+
   async discover(): Promise<TraceFile[]> {
     let projectDirs: string[];
     try {
-      projectDirs = await readdir(PROJECTS_DIR);
+      projectDirs = await readdir(this.rootDir);
     } catch {
       return []; // Claude Code를 안 쓰는 환경
     }
 
     const files: TraceFile[] = [];
     for (const slug of projectDirs) {
-      const dir = join(PROJECTS_DIR, slug);
+      const dir = join(this.rootDir, slug);
       // 세션 jsonl은 프로젝트 바로 아래, 서브에이전트는 <세션ID>/subagents/ 아래에 있다
       await this.collect(dir, slug, files);
     }
