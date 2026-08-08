@@ -17,7 +17,7 @@ It is not a quota meter. It answers the other question: **where did all of that 
 
 ## Features
 
-- **Session list** — duration, tokens, cache hit rate, tool calls, errors, and cost per
+- **Session list** — active time, tokens, cache hit rate, tool calls, errors, and cost per
   session, filterable by project.
 - **Session timeline** — the full step chain: thinking → tool call → result. Expand raw
   tool arguments and output, see per-step output tokens and the gap to the next step,
@@ -27,6 +27,11 @@ It is not a quota meter. It answers the other question: **where did all of that 
 - **Full-text search** — search across prompts, tool arguments, and tool output. Ranked by
   relevance, with highlighted snippets that link straight to the step in its timeline.
 - **Aggregates** — tool usage and per-tool failure rate, spend by project, output by model.
+
+"Active" is wall-clock time minus idle. A session you pick up again three days later spans
+429 hours but holds about 3 hours of work; the raw span is shown underneath when the two
+diverge. The threshold is 5 minutes, chosen by measuring: between 5 and 15 minutes the
+totals barely move, so short gaps and real idle separate cleanly there.
 
 Cost is computed from per-model rates including the cache multipliers (5-minute cache
 writes at 1.25×, 1-hour at 2×, reads at 0.1×), so the numbers reflect what prompt caching

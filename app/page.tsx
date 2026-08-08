@@ -114,8 +114,7 @@ export default async function SessionListPage({
                 <th className="px-4 py-3 font-medium">Session</th>
                 <th className="px-4 py-3 font-medium">Project</th>
                 <th className="px-4 py-3 font-medium">Started</th>
-                {/* 첫 기록과 마지막 기록 사이의 벽시계 간격. 세션을 며칠 뒤 이어가면 그만큼 길어진다 */}
-                <th className="px-4 py-3 text-right font-medium">Span</th>
+                <th className="px-4 py-3 text-right font-medium">Active</th>
                 <th className="px-4 py-3 font-medium">Models</th>
                 <th className="px-4 py-3 text-right font-medium">Output</th>
                 <th className="px-4 py-3 text-right font-medium">Cache</th>
@@ -157,8 +156,15 @@ export default async function SessionListPage({
                   <td className="whitespace-nowrap px-4 py-3 text-neutral-600 dark:text-neutral-400">
                     {formatDateTime(s.startedAt)}
                   </td>
+                  {/* 벽시계 간격은 며칠 뒤 이어가면 수백 시간이 되어 오해를 부른다.
+                      유휴를 뺀 작업 시간을 앞에 세우고 간격은 부제로 내린다 */}
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
-                    {formatDuration(s.durationMs)}
+                    {formatDuration(s.activeMs)}
+                    {s.durationMs > s.activeMs * 2 && (
+                      <div className="text-xs text-neutral-400">
+                        over {formatDuration(s.durationMs)}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-600 dark:text-neutral-400">
                     {s.models.map(shortModel).join(", ") || "-"}

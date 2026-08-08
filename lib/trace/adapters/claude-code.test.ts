@@ -165,6 +165,23 @@ describe("ClaudeCodeAdapter", () => {
       assert.equal(parent.session.durationMs, 600_000);
     });
 
+    // 벽시계 간격은 며칠 뒤 이어가면 수백 시간이 되어 실제 작업량을 못 나타낸다
+    test("유휴 간격을 뺀 활동 시간을 따로 센다", () => {
+      // 픽스처 기록은 0s~51s에 촘촘히 있고, 마지막 system만 10분 뒤에 있다.
+      // 5분 임계값이면 그 마지막 간격(9분 9초)만 유휴로 빠진다
+      assert.equal(parent.session.durationMs, 600_000);
+      assert.equal(parent.session.activeMs, 51_000);
+    });
+
+    test("활동 시간은 결코 벽시계 간격을 넘지 않는다", () => {
+      for (const t of [parent, subagent]) {
+        assert.ok(
+          t.session.activeMs <= t.session.durationMs,
+          `${t.session.id}: active ${t.session.activeMs} > span ${t.session.durationMs}`,
+        );
+      }
+    });
+
     test("<synthetic>이 아닌 모델만 모은다", () => {
       assert.deepEqual(parent.session.models, ["claude-opus-5"]);
     });

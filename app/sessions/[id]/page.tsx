@@ -78,7 +78,10 @@ export default async function SessionTimelinePage({
           {session.gitBranch && session.gitBranch !== "HEAD"
             ? ` · ${presentBranch(session.gitBranch, mode)}`
             : ""} ·{" "}
-          {formatDateTime(session.startedAt)} · {formatDuration(session.durationMs)} ·{" "}
+          {formatDateTime(session.startedAt)} · {formatDuration(session.activeMs)} active
+          {session.durationMs > session.activeMs * 2
+            ? ` over ${formatDuration(session.durationMs)}`
+            : ""} ·{" "}
           {session.models.map(shortModel).join(", ") || "no model recorded"}
         </p>
       </header>
