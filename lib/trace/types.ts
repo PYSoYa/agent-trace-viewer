@@ -81,7 +81,10 @@ export type TraceSession = {
   firstPrompt: string | null;
   startedAt: string;
   endedAt: string;
+  /** 첫 기록과 마지막 기록 사이의 벽시계 간격. 며칠 뒤 이어가면 그만큼 커진다 */
   durationMs: number;
+  /** 유휴를 뺀 실제 작업 시간 */
+  activeMs: number;
   models: string[];
   tokens: TokenUsage;
   costUsd: number;

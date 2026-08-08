@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   started_at      TEXT NOT NULL,
   ended_at        TEXT NOT NULL,
   duration_ms     INTEGER NOT NULL,
+  active_ms       INTEGER NOT NULL,
   models          TEXT NOT NULL,
   input_tokens    INTEGER NOT NULL,
   output_tokens   INTEGER NOT NULL,
@@ -104,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_steps_session_seq ON steps (session_id, seq);
  * 스키마를 바꿀 때마다 올린다.
  * 이 DB는 jsonl에서 다시 만들 수 있는 캐시라, 버전이 다르면 조용히 어긋난 채로 두는 대신 버리고 새로 만든다.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const DROP_ALL = `
 DROP TABLE IF EXISTS steps_fts;

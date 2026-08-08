@@ -31,6 +31,34 @@ const META_PROMPT_PREFIXES = [
   "Caveat: The messages below were generated",
 ];
 
+/**
+ * 이 간격을 넘으면 작업이 아니라 자리를 비운 것으로 본다.
+ * 실제 로그에서 임계값을 1·5·15·30분으로 바꿔가며 재보니 5분과 15분 사이에서 값이
+ * 거의 변하지 않았다(3.1h → 3.4h). 짧은 간격과 긴 유휴가 뚜렷이 갈린다는 뜻이라
+ * 그 평평한 구간의 앞쪽을 택했다.
+ */
+const IDLE_GAP_MS = 5 * 60 * 1000;
+
+/**
+ * 연속한 스텝 사이 간격 중 유휴가 아닌 것만 더한다.
+ *
+ * 스텝만 본다. pr-link처럼 스텝을 만들지 않는 레코드의 타임스탬프까지 세면
+ * 일하지 않은 구간이 활동으로 잡힌다. 타임라인이 스텝 사이 간격을 보여주므로
+ * 화면에 보이는 것과 합계가 맞기도 한다.
+ */
+function activeMsOf(steps: TraceStep[]): number {
+  const times = steps
+    .map((s) => Date.parse(s.timestamp))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  let total = 0;
+  for (let i = 1; i < times.length; i++) {
+    const gap = times[i] - times[i - 1];
+    if (gap > 0 && gap <= IDLE_GAP_MS) total += gap;
+  }
+  return total;
+}
+
 function isMetaPrompt(text: string): boolean {
   const head = text.trimStart();
   return META_PROMPT_PREFIXES.some((p) => head.startsWith(p));
@@ -453,6 +481,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
         startedAt,
         endedAt,
         durationMs,
+        activeMs: activeMsOf(acc.steps),
         models: [...acc.models].sort(),
         tokens: acc.tokens,
         costUsd: acc.costUsd,

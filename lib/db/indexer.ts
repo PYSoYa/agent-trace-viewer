@@ -114,10 +114,10 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
   const insertSession = db.prepare(`
     INSERT OR REPLACE INTO sessions (
       id, parent_session_id, agent_id, source, project_slug, project_name, file_path, cwd, git_branch,
-      title, first_prompt, started_at, ended_at, duration_ms, models,
+      title, first_prompt, started_at, ended_at, duration_ms, active_ms, models,
       input_tokens, output_tokens, cache_write_5m, cache_write_1h, cache_read,
       cost_usd, tool_call_count, error_count, step_count
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
   const insertStep = db.prepare(`
@@ -163,6 +163,7 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
         s.startedAt,
         s.endedAt,
         s.durationMs,
+        s.activeMs,
         JSON.stringify(s.models),
         s.tokens.input,
         s.tokens.output,

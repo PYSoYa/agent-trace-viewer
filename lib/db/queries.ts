@@ -12,6 +12,7 @@ export type SessionRow = {
   firstPrompt: string | null;
   startedAt: string;
   durationMs: number;
+  activeMs: number;
   models: string[];
   /** 이 세션 자체의 사용량 (서브에이전트 제외) */
   tokens: TokenUsage;
@@ -38,6 +39,7 @@ type RawSession = {
   first_prompt: string | null;
   started_at: string;
   duration_ms: number;
+  active_ms: number;
   models: string;
   input_tokens: number;
   output_tokens: number;
@@ -77,6 +79,7 @@ function toRow(r: RawSession): SessionRow {
     firstPrompt: r.first_prompt,
     startedAt: r.started_at,
     durationMs: r.duration_ms,
+    activeMs: r.active_ms,
     models,
     tokens,
     cacheHitRate: cacheHitRate(tokens),
@@ -94,7 +97,7 @@ function toRow(r: RawSession): SessionRow {
 /** 서브에이전트 합계를 부모 행에 붙인 공통 SELECT. WHERE는 호출부에서 만든다 */
 const SELECT_BASE = `
   SELECT s.id, s.agent_id, s.project_slug, s.project_name, s.git_branch, s.title, s.first_prompt,
-         s.started_at, s.duration_ms, s.models,
+         s.started_at, s.duration_ms, s.active_ms, s.models,
          s.input_tokens, s.output_tokens, s.cache_write_5m, s.cache_write_1h, s.cache_read,
          s.cost_usd, s.tool_call_count, s.error_count, s.step_count,
          COALESCE(sub.n, 0)    AS subagent_count,
