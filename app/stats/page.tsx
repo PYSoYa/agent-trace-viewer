@@ -1,7 +1,12 @@
 import Link from "next/link";
-import { listModelStats, listProjectStats, listToolStats } from "@/lib/db/queries";
+import {
+  listModelStats,
+  listProjectStats,
+  listSourceStats,
+  listToolStats,
+} from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
-import { formatPercent, formatTokens, shortModel } from "@/lib/format";
+import { formatDuration, formatPercent, formatTokens, shortModel } from "@/lib/format";
 import { getRedactMode } from "@/lib/mode";
 import { presentProject, projectKey } from "@/lib/present";
 import { DemoToggle } from "../demo-toggle";
@@ -12,6 +17,7 @@ export default async function StatsPage() {
   const tools = listToolStats();
   const projects = listProjectStats();
   const models = listModelStats();
+  const sources = listSourceStats();
   const mode = await getRedactMode();
 
   const maxToolCalls = Math.max(1, ...tools.map((t) => t.calls));
@@ -26,6 +32,45 @@ export default async function StatsPage() {
         <DemoToggle mode={mode} />
       </div>
       <h1 className="mt-4 mb-8 text-xl font-semibold tracking-tight">Stats</h1>
+
+      {sources.length > 1 && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-sm font-medium text-neutral-500">By agent</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {sources.map((s) => (
+              <div
+                key={s.source}
+                className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800"
+              >
+                <div className="mb-2 text-sm font-medium">
+                  {s.source === "claude-code" ? "Claude Code" : "Codex"}
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-neutral-500">
+                  <dt>Sessions</dt>
+                  <dd className="text-right tabular-nums">{s.sessions}</dd>
+                  <dt>Cost</dt>
+                  <dd className="text-right tabular-nums">{formatUsd(s.costUsd)}</dd>
+                  {/* 세션 하나에 얼마를 쓰는지가 두 에이전트를 비교하는 가장 직접적인 값이다 */}
+                  <dt>Cost / session</dt>
+                  <dd className="text-right tabular-nums">
+                    {formatUsd(s.sessions ? s.costUsd / s.sessions : 0)}
+                  </dd>
+                  <dt>Active time</dt>
+                  <dd className="text-right tabular-nums">{formatDuration(s.activeMs)}</dd>
+                  <dt>Output</dt>
+                  <dd className="text-right tabular-nums">{formatTokens(s.outputTokens)}</dd>
+                  <dt>Cache hit rate</dt>
+                  <dd className="text-right tabular-nums">{formatPercent(s.cacheHitRate)}</dd>
+                  <dt>Tool calls</dt>
+                  <dd className="text-right tabular-nums">{s.toolCalls.toLocaleString()}</dd>
+                  <dt>Errors</dt>
+                  <dd className="text-right tabular-nums">{s.errors.toLocaleString()}</dd>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mb-10">
         <h2 className="mb-3 text-sm font-medium text-neutral-500">
@@ -49,7 +94,15 @@ export default async function StatsPage() {
                   key={t.toolName}
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
-                  <td className="px-4 py-2.5 font-mono text-xs">{t.toolName}</td>
+                  {/* 실패를 실제로 보려면 결국 원문을 찾아야 한다 */}
+                  <td className="px-4 py-2.5 font-mono text-xs">
+                    <Link
+                      href={`/search?q=${encodeURIComponent(t.toolName)}`}
+                      className="hover:underline"
+                    >
+                      {t.toolName}
+                    </Link>
+                  </td>
                   <td className="w-56 px-4 py-2.5">
                     <Bar ratio={t.calls / maxToolCalls} />
                   </td>
@@ -85,6 +138,7 @@ export default async function StatsPage() {
                 <th className="px-4 py-2.5 text-right font-medium">Sessions</th>
                 <th className="px-4 py-2.5 text-right font-medium">Output</th>
                 <th className="px-4 py-2.5 text-right font-medium">Cache reads</th>
+                <th className="px-4 py-2.5 text-right font-medium">Hit rate</th>
                 <th className="px-4 py-2.5 text-right font-medium">Tools</th>
                 <th className="px-4 py-2.5 text-right font-medium">Errors</th>
                 <th className="px-4 py-2.5 text-right font-medium">Cost</th>
@@ -113,6 +167,9 @@ export default async function StatsPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-neutral-500">
                     {formatTokens(p.cacheReadTokens)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-neutral-500">
+                    {formatPercent(p.cacheHitRate)}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-neutral-500">
                     {p.toolCalls}

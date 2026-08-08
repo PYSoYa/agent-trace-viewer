@@ -7,6 +7,8 @@ import {
   listSteps,
   listSubagents,
   listTouchedFiles,
+  stepKindCounts,
+  type StepFilter,
   type StepRow,
 } from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
@@ -40,18 +42,23 @@ export default async function SessionTimelinePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; kind?: string; errors?: string }>;
 }) {
   const { id } = await params;
-  const { page } = await searchParams;
+  const { page, kind, errors } = await searchParams;
 
   const session = getSession(decodeURIComponent(id));
   if (!session) notFound();
 
-  const total = countSteps(session.id);
+  const filter: StepFilter = { kind: kind || undefined, errorsOnly: errors === "1" };
+  const filtered = Boolean(filter.kind || filter.errorsOnly);
+
+  const total = countSteps(session.id, filter);
+  const allTotal = filtered ? countSteps(session.id) : total;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = Math.min(Math.max(1, Number(page) || 1), pageCount);
-  const steps = listSteps(session.id, (current - 1) * PAGE_SIZE, PAGE_SIZE);
+  const steps = listSteps(session.id, (current - 1) * PAGE_SIZE, PAGE_SIZE, filter);
+  const kindCounts = stepKindCounts(session.id);
   const subagents = listSubagents(session.id);
   const prs = listSessionPrs(session.id);
   const files = listTouchedFiles(session.id);
@@ -181,26 +188,70 @@ export default async function SessionTimelinePage({
       <section>
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-sm font-medium text-neutral-500">
-            Timeline · {total.toLocaleString()} steps
+            Timeline · {total.toLocaleString()}
+            {filtered ? ` of ${allTotal.toLocaleString()}` : ""} steps
           </h2>
-          <Pager sessionId={session.id} current={current} pageCount={pageCount} />
+          <Pager
+            sessionId={session.id}
+            current={current}
+            pageCount={pageCount}
+            kind={filter.kind}
+            errorsOnly={filter.errorsOnly}
+          />
         </div>
+
+        {/* 4,655스텝짜리 세션에서 에러가 32쪽 중 24쪽에 흩어진다 */}
+        <nav className="mb-4 flex flex-wrap gap-2">
+          <StepChip sessionId={session.id} label="All" active={!filtered} />
+          {session.errorCount > 0 && (
+            <StepChip
+              sessionId={session.id}
+              label={`Errors (${session.errorCount})`}
+              active={filter.errorsOnly === true && !filter.kind}
+              params="errors=1"
+              tone="bad"
+            />
+          )}
+          {KIND_ORDER.filter((k) => kindCounts.some((c) => c.kind === k)).map((k) => (
+            <StepChip
+              key={k}
+              sessionId={session.id}
+              label={`${KIND_LABEL[k] ?? k} (${kindCounts.find((c) => c.kind === k)?.n ?? 0})`}
+              active={filter.kind === k && !filter.errorsOnly}
+              params={`kind=${k}`}
+            />
+          ))}
+        </nav>
 
         <ol className="space-y-2">
           {steps.map((step) => (
-            <Step key={step.uuid} step={step} mode={mode} />
+            <Step key={step.uuid} step={step} mode={mode} showGap={!filtered} />
           ))}
         </ol>
 
         <div className="mt-6 flex justify-end">
-          <Pager sessionId={session.id} current={current} pageCount={pageCount} />
+          <Pager
+            sessionId={session.id}
+            current={current}
+            pageCount={pageCount}
+            kind={filter.kind}
+            errorsOnly={filter.errorsOnly}
+          />
         </div>
       </section>
     </main>
   );
 }
 
-function Step({ step, mode }: { step: StepRow; mode: RedactMode }) {
+function Step({
+  step,
+  mode,
+  showGap,
+}: {
+  step: StepRow;
+  mode: RedactMode;
+  showGap: boolean;
+}) {
   const text = presentText(step.text, mode);
   const toolInput = presentText(step.toolInput, mode);
   const toolResult = presentText(step.toolResult, mode);
@@ -208,7 +259,9 @@ function Step({ step, mode }: { step: StepRow; mode: RedactMode }) {
     return (
       <li className="px-3 py-1 text-xs text-neutral-400">
         #{step.seq} {step.text}
-        {step.gapMs !== null && step.gapMs > 1000 ? ` · waited ${formatDuration(step.gapMs)}` : ""}
+        {showGap && step.gapMs !== null && step.gapMs > 1000
+          ? ` · waited ${formatDuration(step.gapMs)}`
+          : ""}
       </li>
     );
   }
@@ -230,7 +283,8 @@ function Step({ step, mode }: { step: StepRow; mode: RedactMode }) {
         {step.outputTokens !== null && (
           <span className="tabular-nums">out {formatTokens(step.outputTokens)}</span>
         )}
-        {step.gapMs !== null && step.gapMs > 1000 && (
+        {/* 필터를 걸면 간격이 '다음 일치 스텝까지'가 되어 뜻이 달라진다 */}
+        {showGap && step.gapMs !== null && step.gapMs > 1000 && (
           <span className="tabular-nums">+{formatDuration(step.gapMs)}</span>
         )}
       </div>
@@ -322,21 +376,57 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "ba
   );
 }
 
+const KIND_ORDER = ["user_prompt", "assistant_text", "thinking", "tool_call", "tool_result"];
+
+function StepChip({
+  sessionId,
+  label,
+  active,
+  params,
+  tone,
+}: {
+  sessionId: string;
+  label: string;
+  active: boolean;
+  params?: string;
+  tone?: "bad";
+}) {
+  const href = `/sessions/${encodeURIComponent(sessionId)}${params ? `?${params}` : ""}`;
+  const base = "rounded-full px-3 py-1 text-xs";
+  const cls = active
+    ? `${base} bg-neutral-900 font-medium text-white dark:bg-neutral-100 dark:text-neutral-900`
+    : tone === "bad"
+      ? `${base} border border-red-300 text-red-700 hover:border-red-400 dark:border-red-900 dark:text-red-400`
+      : `${base} border border-neutral-300 text-neutral-600 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400`;
+  return (
+    <Link href={href} className={cls}>
+      {label}
+    </Link>
+  );
+}
+
 function Pager({
   sessionId,
   current,
   pageCount,
+  kind,
+  errorsOnly,
 }: {
   sessionId: string;
   current: number;
   pageCount: number;
+  kind?: string;
+  errorsOnly?: boolean;
 }) {
   if (pageCount <= 1) return null;
+  // 쪽을 넘겨도 필터가 유지되어야 한다
+  const keep = [kind ? `kind=${kind}` : "", errorsOnly ? "errors=1" : ""].filter(Boolean).join("&");
+  const q = (p: number) => `?page=${p}${keep ? `&${keep}` : ""}`;
   const base = `/sessions/${encodeURIComponent(sessionId)}`;
   return (
     <nav className="flex items-center gap-2 text-xs">
       {current > 1 ? (
-        <Link href={`${base}?page=${current - 1}`} className="hover:underline">
+        <Link href={`${base}${q(current - 1)}`} className="hover:underline">
           Prev
         </Link>
       ) : (
@@ -346,7 +436,7 @@ function Pager({
         {current} / {pageCount}
       </span>
       {current < pageCount ? (
-        <Link href={`${base}?page=${current + 1}`} className="hover:underline">
+        <Link href={`${base}${q(current + 1)}`} className="hover:underline">
           Next
         </Link>
       ) : (
