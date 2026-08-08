@@ -8,6 +8,7 @@ import {
   addUsage,
   emptyUsage,
   type ParsedTrace,
+  type PrLink,
   type TokenUsage,
   type TraceSession,
   type TraceStep,
@@ -52,6 +53,19 @@ function readUsage(raw: Record<string, unknown> | undefined): TokenUsage {
   };
 }
 
+/** 툴 인자에서 대상 파일 경로를 뽑는다. 툴마다 필드 이름이 다르다 */
+const FILE_PATH_FIELDS = ["file_path", "notebook_path"];
+
+function filePathOf(input: unknown): string | null {
+  if (typeof input !== "object" || input === null) return null;
+  const obj = input as Record<string, unknown>;
+  for (const key of FILE_PATH_FIELDS) {
+    const v = obj[key];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+
 function textOf(content: unknown): string | null {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return null;
@@ -88,6 +102,8 @@ type Accumulator = {
   toolCallCount: number;
   errorCount: number;
   timestamps: string[];
+  /** 같은 PR이 여러 번 기록되므로 url로 중복을 제거한다 */
+  prLinks: Map<string, PrLink>;
   title: string | null;
   firstPrompt: string | null;
   cwd: string | null;
@@ -106,6 +122,7 @@ function newAccumulator(sessionId: string): Accumulator {
     toolCallCount: 0,
     errorCount: 0,
     timestamps: [],
+    prLinks: new Map(),
     title: null,
     firstPrompt: null,
     cwd: null,
@@ -204,6 +221,19 @@ export class ClaudeCodeAdapter implements TraceAdapter {
         continue;
       }
 
+      // 세션이 만든 PR. 같은 PR이 여러 번 기록되므로 url 기준으로 처음 것만 남긴다
+      if (type === "pr-link" && typeof rec.prUrl === "string") {
+        if (!acc.prLinks.has(rec.prUrl)) {
+          acc.prLinks.set(rec.prUrl, {
+            number: typeof rec.prNumber === "number" ? rec.prNumber : 0,
+            url: rec.prUrl,
+            repository: typeof rec.prRepository === "string" ? rec.prRepository : "",
+            firstSeenAt: timestamp ?? "",
+          });
+        }
+        continue;
+      }
+
       const uuid = (rec.uuid as string | undefined) ?? `${file.path}:${seq}`;
       const parentUuid = (rec.parentUuid as string | null | undefined) ?? null;
       const isSidechain = rec.isSidechain === true;
@@ -255,6 +285,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               text: typeof b.thinking === "string" ? b.thinking : "",
               toolName: null,
               toolUseId: null,
+              filePath: null,
               toolInput: null,
               toolResult: null,
               isError: false,
@@ -273,6 +304,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               text: b.text,
               toolName: null,
               toolUseId: null,
+              filePath: null,
               toolInput: null,
               toolResult: null,
               isError: false,
@@ -292,6 +324,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               text: null,
               toolName: (b.name as string | undefined) ?? "unknown",
               toolUseId: (b.id as string | undefined) ?? null,
+              filePath: filePathOf(b.input),
               toolInput: JSON.stringify(b.input ?? null),
               toolResult: null,
               isError: false,
@@ -326,6 +359,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
               text: null,
               toolName: null,
               toolUseId: (b.tool_use_id as string | undefined) ?? null,
+              filePath: null,
               toolInput: null,
               toolResult: toolResultText(b.content),
               isError,
@@ -351,6 +385,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
           text,
           toolName: null,
           toolUseId: null,
+          filePath: null,
           toolInput: null,
           toolResult: null,
           isError: false,
@@ -374,6 +409,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
           text: subtype,
           toolName: null,
           toolUseId: null,
+          filePath: null,
           toolInput: null,
           toolResult: null,
           isError: false,
@@ -419,7 +455,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
         errorCount: acc.errorCount,
         stepCount: acc.steps.length,
       };
-      out.push({ session, steps: acc.steps });
+      out.push({ session, steps: acc.steps, prLinks: [...acc.prLinks.values()] });
     }
     return out;
   }

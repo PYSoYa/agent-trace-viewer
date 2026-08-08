@@ -261,6 +261,71 @@ export function listSubagents(parentId: string): SubagentRow[] {
   }));
 }
 
+export type SessionPr = {
+  number: number;
+  url: string;
+  repository: string;
+};
+
+export function listSessionPrs(sessionId: string): SessionPr[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT pr_number, pr_url, pr_repository FROM session_prs
+       WHERE session_id = ? ORDER BY first_seen_at`,
+    )
+    .all(sessionId) as unknown as {
+    pr_number: number;
+    pr_url: string;
+    pr_repository: string;
+  }[];
+  return rows.map((r) => ({
+    number: r.pr_number,
+    url: r.pr_url,
+    repository: r.pr_repository,
+  }));
+}
+
+/** 목록에서 세션마다 개별 조회하지 않도록 한 번에 가져온다 */
+export function prCountsBySession(): Map<string, number> {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT session_id, COUNT(*) AS n FROM session_prs GROUP BY session_id")
+    .all() as unknown as { session_id: string; n: number }[];
+  return new Map(rows.map((r) => [r.session_id, r.n]));
+}
+
+export type TouchedFile = {
+  path: string;
+  writes: number;
+  reads: number;
+};
+
+/**
+ * 세션이 건드린 파일. file-history 레코드 대신 이미 파싱된 툴 인자에서 뽑는다.
+ * Edit/Write는 변경, Read는 열람으로 센다.
+ */
+export function listTouchedFiles(sessionId: string, limit = 200): TouchedFile[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT file_path,
+              SUM(CASE WHEN tool_name IN ('Edit','Write','MultiEdit','NotebookEdit') THEN 1 ELSE 0 END) AS writes,
+              SUM(CASE WHEN tool_name = 'Read' THEN 1 ELSE 0 END) AS reads
+       FROM steps
+       WHERE session_id = ? AND kind = 'tool_call' AND file_path IS NOT NULL
+       GROUP BY file_path
+       ORDER BY writes DESC, reads DESC
+       LIMIT ?`,
+    )
+    .all(sessionId, limit) as unknown as {
+    file_path: string;
+    writes: number;
+    reads: number;
+  }[];
+  return rows.map((r) => ({ path: r.file_path, writes: r.writes, reads: r.reads }));
+}
+
 export type ToolStat = {
   toolName: string;
   calls: number;

@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import {
   countSteps,
   getSession,
+  listSessionPrs,
   listSteps,
   listSubagents,
+  listTouchedFiles,
   type StepRow,
 } from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
@@ -40,6 +42,9 @@ export default async function SessionTimelinePage({
   const current = Math.min(Math.max(1, Number(page) || 1), pageCount);
   const steps = listSteps(session.id, (current - 1) * PAGE_SIZE, PAGE_SIZE);
   const subagents = listSubagents(session.id);
+  const prs = listSessionPrs(session.id);
+  const files = listTouchedFiles(session.id);
+  const changed = files.filter((f) => f.writes > 0);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -66,6 +71,59 @@ export default async function SessionTimelinePage({
         <Stat label="툴 호출" value={String(session.toolCallCount)} />
         <Stat label="에러" value={String(session.errorCount)} tone={session.errorCount ? "bad" : undefined} />
       </section>
+
+      {(prs.length > 0 || changed.length > 0) && (
+        <section className="mb-8 grid gap-4 sm:grid-cols-2">
+          {prs.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-medium text-neutral-500">
+                이 세션이 만든 PR {prs.length}개
+              </h2>
+              <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
+                {prs.map((pr) => (
+                  <li key={pr.url} className="px-4 py-2.5 text-sm">
+                    <a
+                      href={pr.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium hover:underline"
+                    >
+                      #{pr.number}
+                    </a>
+                    <span className="ml-2 text-xs text-neutral-500">{pr.repository}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {changed.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-medium text-neutral-500">
+                변경한 파일 {changed.length}개
+                {files.length > changed.length
+                  ? ` · 읽기만 한 파일 ${files.length - changed.length}개`
+                  : ""}
+              </h2>
+              <ul className="max-h-56 divide-y divide-neutral-100 overflow-auto rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
+                {changed.map((f) => (
+                  <li
+                    key={f.path}
+                    className="flex items-center justify-between gap-3 px-4 py-2 text-xs"
+                  >
+                    <span className="truncate font-mono" title={f.path}>
+                      {f.path.replace(/^.*\/(?=[^/]+\/[^/]+$)/, "…/")}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-neutral-500">
+                      {f.writes}회 변경
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       {subagents.length > 0 && (
         <section className="mb-8">

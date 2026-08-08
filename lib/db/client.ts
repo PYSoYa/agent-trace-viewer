@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS steps (
   text           TEXT,
   tool_name      TEXT,
   tool_use_id    TEXT,
+  file_path      TEXT,
   tool_input     TEXT,
   tool_result    TEXT,
   is_error       INTEGER NOT NULL,
@@ -64,11 +65,35 @@ CREATE TABLE IF NOT EXISTS steps (
   PRIMARY KEY (session_id, uuid)
 );
 
+CREATE TABLE IF NOT EXISTS session_prs (
+  session_id    TEXT NOT NULL,
+  pr_url        TEXT NOT NULL,
+  pr_number     INTEGER NOT NULL,
+  pr_repository TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  PRIMARY KEY (session_id, pr_url)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_started  ON sessions (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_steps_file        ON steps (file_path);
+CREATE INDEX IF NOT EXISTS idx_prs_url           ON session_prs (pr_url);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent   ON sessions (parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_file     ON sessions (file_path);
 CREATE INDEX IF NOT EXISTS idx_sessions_project  ON sessions (project_slug);
 CREATE INDEX IF NOT EXISTS idx_steps_session_seq ON steps (session_id, seq);
+`;
+
+/**
+ * 스키마를 바꿀 때마다 올린다.
+ * 이 DB는 jsonl에서 다시 만들 수 있는 캐시라, 버전이 다르면 조용히 어긋난 채로 두는 대신 버리고 새로 만든다.
+ */
+const SCHEMA_VERSION = 3;
+
+const DROP_ALL = `
+DROP TABLE IF EXISTS session_prs;
+DROP TABLE IF EXISTS steps;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS indexed_files;
 `;
 
 let db: DatabaseSync | null = null;
@@ -81,6 +106,15 @@ export function getDb(): DatabaseSync {
   // 읽기 중 인덱싱이 겹쳐도 막히지 않도록
   conn.exec("PRAGMA journal_mode = WAL");
   conn.exec("PRAGMA synchronous = NORMAL");
+
+  const found = (conn.prepare("PRAGMA user_version").get() as { user_version: number })
+    .user_version;
+  if (found !== SCHEMA_VERSION) {
+    // indexed_files까지 지우므로 다음 인덱싱에서 전체가 다시 파싱된다
+    conn.exec(DROP_ALL);
+    conn.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  }
+
   conn.exec(SCHEMA);
   db = conn;
   return conn;

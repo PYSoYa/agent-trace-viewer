@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { before, describe, test } from "node:test";
 import { ClaudeCodeAdapter } from "./claude-code";
-import { promptTokens, type ParsedTrace } from "../types";
+import { isWriteTool, promptTokens, type ParsedTrace } from "../types";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = join(here, "__fixtures__", "projects");
@@ -76,17 +76,19 @@ describe("ClaudeCodeAdapter", () => {
         "user_prompt",
         "thinking",
         "assistant_text",
-        "tool_call",
+        "tool_call", // Bash
         "tool_result",
         "thinking",
-        "tool_call",
-        "tool_result",
+        "tool_call", // Read
+        "tool_call", // Edit
+        "tool_result", // Read 실패
+        "tool_result", // Edit 성공
         "system",
       ]);
     });
 
     test("툴 호출 수와 에러 수를 센다", () => {
-      assert.equal(parent.session.toolCallCount, 2);
+      assert.equal(parent.session.toolCallCount, 3);
       assert.equal(parent.session.errorCount, 1);
     });
 
@@ -106,7 +108,48 @@ describe("ClaudeCodeAdapter", () => {
 
     test("잘린 마지막 줄을 무시하고 나머지를 살린다", () => {
       // 픽스처 마지막 줄은 파일이 쓰이는 도중처럼 JSON이 잘려 있다
-      assert.equal(parent.steps.length, 10);
+      assert.equal(parent.steps.length, 12);
+    });
+  });
+
+  describe("결과물 추적", () => {
+    test("툴 인자에서 대상 파일 경로를 뽑는다", () => {
+      const byTool = new Map(
+        parent.steps
+          .filter((s) => s.kind === "tool_call")
+          .map((s) => [s.toolName, s.filePath] as const),
+      );
+      assert.equal(byTool.get("Edit"), "/tmp/demo-project/src/app.ts");
+      assert.equal(byTool.get("Read"), "/tmp/demo-project/README.md");
+      assert.equal(byTool.get("Bash"), null, "Bash는 대상 파일이 없다");
+    });
+
+    test("변경 툴과 열람 툴을 구분한다", () => {
+      assert.equal(isWriteTool("Edit"), true);
+      assert.equal(isWriteTool("Write"), true);
+      assert.equal(isWriteTool("Read"), false);
+      assert.equal(isWriteTool("Bash"), false);
+      assert.equal(isWriteTool(null), false);
+    });
+
+    test("같은 PR이 여러 번 기록돼도 한 번만 남긴다", () => {
+      // 픽스처에는 #7이 두 줄, #8이 한 줄 들어 있다
+      assert.equal(parent.prLinks.length, 2);
+      assert.deepEqual(
+        parent.prLinks.map((p) => p.number).sort(),
+        [7, 8],
+      );
+    });
+
+    test("PR의 저장소와 처음 기록된 시각을 남긴다", () => {
+      const pr7 = parent.prLinks.find((p) => p.number === 7);
+      assert.equal(pr7?.repository, "acme/demo");
+      assert.equal(pr7?.url, "https://github.com/acme/demo/pull/7");
+      assert.equal(pr7?.firstSeenAt, "2026-01-01T00:05:00.000Z", "두 번째가 아니라 첫 기록");
+    });
+
+    test("PR이 없는 세션은 빈 배열", () => {
+      assert.deepEqual(subagent.prLinks, []);
     });
   });
 

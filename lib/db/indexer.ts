@@ -80,9 +80,9 @@ function deleteFile(path: string): void {
   const db = getDb();
   db.exec("BEGIN");
   try {
-    db.prepare(
-      "DELETE FROM steps WHERE session_id IN (SELECT id FROM sessions WHERE file_path = ?)",
-    ).run(path);
+    const staleSessions = "SELECT id FROM sessions WHERE file_path = ?";
+    db.prepare(`DELETE FROM steps WHERE session_id IN (${staleSessions})`).run(path);
+    db.prepare(`DELETE FROM session_prs WHERE session_id IN (${staleSessions})`).run(path);
     db.prepare("DELETE FROM sessions WHERE file_path = ?").run(path);
     db.prepare("DELETE FROM indexed_files WHERE path = ?").run(path);
     db.exec("COMMIT");
@@ -107,20 +107,25 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
   const insertStep = db.prepare(`
     INSERT OR REPLACE INTO steps (
       session_id, uuid, parent_uuid, seq, kind, timestamp, model, text,
-      tool_name, tool_use_id, tool_input, tool_result, is_error, is_sidechain,
+      tool_name, tool_use_id, file_path, tool_input, tool_result, is_error, is_sidechain,
       input_tokens, output_tokens, cache_write_5m, cache_write_1h, cache_read, duration_ms
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `);
+
+  const insertPr = db.prepare(`
+    INSERT OR REPLACE INTO session_prs (session_id, pr_url, pr_number, pr_repository, first_seen_at)
+    VALUES (?,?,?,?,?)
   `);
 
   db.exec("BEGIN");
   try {
     // 재인덱싱이므로 이 파일이 만들었던 이전 결과부터 지운다
-    db.prepare(
-      "DELETE FROM steps WHERE session_id IN (SELECT id FROM sessions WHERE file_path = ?)",
-    ).run(file.path);
+    const staleSessions = "SELECT id FROM sessions WHERE file_path = ?";
+    db.prepare(`DELETE FROM steps WHERE session_id IN (${staleSessions})`).run(file.path);
+    db.prepare(`DELETE FROM session_prs WHERE session_id IN (${staleSessions})`).run(file.path);
     db.prepare("DELETE FROM sessions WHERE file_path = ?").run(file.path);
 
-    for (const { session: s, steps } of traces) {
+    for (const { session: s, steps, prLinks } of traces) {
       insertSession.run(
         s.id,
         s.parentSessionId,
@@ -160,6 +165,7 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
           step.text,
           step.toolName,
           step.toolUseId,
+          step.filePath,
           step.toolInput,
           step.toolResult,
           step.isError ? 1 : 0,
@@ -171,6 +177,10 @@ function writeFile(file: TraceFile, traces: ParsedTrace[]): void {
           step.tokens?.cacheRead ?? null,
           step.durationMs,
         );
+      }
+
+      for (const pr of prLinks) {
+        insertPr.run(s.id, pr.url, pr.number, pr.repository, pr.firstSeenAt);
       }
     }
 

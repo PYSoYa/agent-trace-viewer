@@ -51,6 +51,8 @@ export type TraceStep = {
   text: string | null;
   toolName: string | null;
   toolUseId: string | null;
+  /** 툴 인자에서 뽑아낸 대상 파일. 세션이 건드린 파일을 모으는 데 쓴다 */
+  filePath: string | null;
   /** JSON 문자열. 원문 그대로 보관해 상세 화면에서 펼친다 */
   toolInput: string | null;
   toolResult: string | null;
@@ -88,7 +90,23 @@ export type TraceSession = {
   stepCount: number;
 };
 
+/** 세션이 만들어낸 PR. Claude Code가 pr-link 레코드로 남긴다 */
+export type PrLink = {
+  number: number;
+  url: string;
+  repository: string;
+  firstSeenAt: string;
+};
+
 export type ParsedTrace = {
   session: TraceSession;
   steps: TraceStep[];
+  prLinks: PrLink[];
 };
+
+/** 파일을 실제로 바꾸는 툴. 나머지(Read 등)는 열람으로 본다 */
+const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+
+export function isWriteTool(toolName: string | null): boolean {
+  return toolName !== null && WRITE_TOOLS.has(toolName);
+}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { indexTraces } from "@/lib/db/indexer";
-import { listProjects, listSessions } from "@/lib/db/queries";
+import { listProjects, listSessions, prCountsBySession } from "@/lib/db/queries";
 import { formatUsd } from "@/lib/pricing";
 import { promptTokens } from "@/lib/trace/types";
 import {
@@ -25,6 +25,7 @@ export default async function SessionListPage({
   const index = await indexTraces();
   const projects = listProjects();
   const sessions = listSessions(project);
+  const prCounts = prCountsBySession();
 
   const totalCost = sessions.reduce((sum, s) => sum + s.totalCostUsd, 0);
   const totalOutput = sessions.reduce(
@@ -114,6 +115,11 @@ export default async function SessionListPage({
                       {s.stepCount} 스텝
                       {s.gitBranch && s.gitBranch !== "HEAD" ? ` · ${s.gitBranch}` : ""}
                       {s.subagentCount > 0 ? ` · 서브에이전트 ${s.subagentCount}` : ""}
+                      {prCounts.get(s.id) ? (
+                        <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          PR {prCounts.get(s.id)}
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
