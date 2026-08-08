@@ -87,7 +87,10 @@ export type TraceSession = {
   activeMs: number;
   models: string[];
   tokens: TokenUsage;
+  /** 단가를 아는 모델에 대해서만 합산한 값. 합계를 계속 더할 수 있도록 숫자로 둔다 */
   costUsd: number;
+  /** 단가를 몰라 비용에 반영하지 못한 모델들. 비어 있지 않으면 costUsd는 과소 집계다 */
+  unpricedModels: string[];
   toolCallCount: number;
   errorCount: number;
   stepCount: number;

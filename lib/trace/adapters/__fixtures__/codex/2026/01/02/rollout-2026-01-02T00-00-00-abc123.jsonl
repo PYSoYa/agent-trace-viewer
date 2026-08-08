@@ -1,0 +1,15 @@
+{"timestamp":"2026-01-02T00:00:00.000Z","type":"session_meta","payload":{"id":"abc123","cwd":"/tmp/demo-project","originator":"codex_cli","cli_version":"0.1.0","model_provider":"openai"}}
+{"timestamp":"2026-01-02T00:00:01.000Z","type":"turn_context","payload":{"model":"gpt-5.4","effort":"medium"}}
+{"timestamp":"2026-01-02T00:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"# Context from my IDE setup\nignore me"}}
+{"timestamp":"2026-01-02T00:00:03.000Z","type":"event_msg","payload":{"type":"user_message","message":"실제 첫 프롬프트"}}
+{"timestamp":"2026-01-02T00:00:04.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"text":"생각 중"}]}}
+{"timestamp":"2026-01-02T00:00:05.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_1","name":"shell","arguments":"{\"command\":\"ls -la\"}"}}
+{"timestamp":"2026-01-02T00:00:06.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"Process exited with code 0\nOutput:\ntotal 0"}}
+{"timestamp":"2026-01-02T00:00:07.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_2","name":"apply_patch","arguments":"{\"file_path\":\"/tmp/demo-project/src/App.ts\"}"}}
+{"timestamp":"2026-01-02T00:00:08.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_2","output":"Process exited with code 1\nerror: patch failed"}}
+{"timestamp":"2026-01-02T00:00:09.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":50},"last_token_usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":50}}}}
+{"timestamp":"2026-01-02T00:00:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"완료했습니다."}]}}
+{"timestamp":"2026-01-02T00:00:11.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":3000,"cached_input_tokens":2400,"output_tokens":80},"last_token_usage":{"input_tokens":2000,"cached_input_tokens":1600,"output_tokens":30}}}}
+{"timestamp":"2026-01-02T00:00:11.500Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":3500,"cached_input_tokens":2400,"output_tokens":95},"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":15}}}}
+{"timestamp":"2026-01-02T00:20:00.000Z","type":"event_msg","payload":{"type":"task_complete","payload":{}}}
+{"timestamp":"2026-01-02T00:20:01.000Z","type":"response_item","payload":{"type":"messa

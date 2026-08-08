@@ -94,9 +94,9 @@ export default async function SessionListPage({
         <FilterChip href="/" active={!project} label="All" />
         {projects.map((p) => (
           <FilterChip
-            key={projectKey(p.slug)}
-            href={`/?project=${projectKey(p.slug)}`}
-            active={projectSlug === p.slug}
+            key={projectKey(p.name)}
+            href={`/?project=${projectKey(p.name)}`}
+            active={projectSlug === p.name}
             label={`${presentProject(p.name, mode)} (${p.sessionCount})`}
           />
         ))}
@@ -143,6 +143,9 @@ export default async function SessionListPage({
                       {s.stepCount} steps
                       {s.gitBranch && s.gitBranch !== "HEAD" ? ` · ${presentBranch(s.gitBranch, mode)}` : ""}
                       {s.subagentCount > 0 ? ` · ${s.subagentCount} subagents` : ""}
+                      <span className="ml-1.5 rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        {s.source === "claude-code" ? "Claude Code" : "Codex"}
+                      </span>
                       {prCounts.get(s.id) ? (
                         <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                           PR {prCounts.get(s.id)}
@@ -186,7 +189,15 @@ export default async function SessionListPage({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {formatUsd(s.totalCostUsd)}
+                    {formatUsd(s.unpricedModels.length ? null : s.totalCostUsd)}
+                    {s.unpricedModels.length > 0 && (
+                      <div
+                        className="text-xs font-normal text-neutral-400"
+                        title={`No rate for ${s.unpricedModels.join(", ")}`}
+                      >
+                        no rate
+                      </div>
+                    )}
                     {s.subagentCount > 0 && (
                       <div className="text-xs font-normal text-neutral-500">
                         own {formatUsd(s.costUsd)}

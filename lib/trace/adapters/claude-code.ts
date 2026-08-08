@@ -131,6 +131,7 @@ type Accumulator = {
   pendingUsage: Map<string, TokenUsage>;
   tokens: TokenUsage;
   costUsd: number;
+  unpricedModels: Set<string>;
   models: Set<string>;
   toolCallCount: number;
   errorCount: number;
@@ -151,6 +152,7 @@ function newAccumulator(sessionId: string): Accumulator {
     pendingUsage: new Map(),
     tokens: emptyUsage(),
     costUsd: 0,
+    unpricedModels: new Set(),
     models: new Set(),
     toolCallCount: 0,
     errorCount: 0,
@@ -286,7 +288,12 @@ export class ClaudeCodeAdapter implements TraceAdapter {
           acc.countedMessageIds.add(messageId);
           const usage = readUsage(message.usage as Record<string, unknown> | undefined);
           acc.tokens = addUsage(acc.tokens, usage);
-          if (model) acc.costUsd += costOf(model, usage, ts);
+          if (model && model !== "<synthetic>") {
+            // <synthetic>은 토큰이 0인 CLI 안내 메시지라 단가가 없어도 미상으로 세지 않는다
+            const cost = costOf(model, usage, ts);
+            if (cost === null) acc.unpricedModels.add(model);
+            else acc.costUsd += cost;
+          }
           acc.pendingUsage.set(messageId, usage);
         }
 
@@ -485,6 +492,7 @@ export class ClaudeCodeAdapter implements TraceAdapter {
         models: [...acc.models].sort(),
         tokens: acc.tokens,
         costUsd: acc.costUsd,
+        unpricedModels: [...acc.unpricedModels].sort(),
         toolCallCount: acc.toolCallCount,
         errorCount: acc.errorCount,
         stepCount: acc.steps.length,

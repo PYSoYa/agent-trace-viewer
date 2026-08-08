@@ -93,12 +93,12 @@ export default async function StatsPage() {
             <tbody>
               {projects.map((p) => (
                 <tr
-                  key={projectKey(p.slug)}
+                  key={projectKey(p.name)}
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
                   <td className="px-4 py-2.5">
                     <Link
-                      href={`/?project=${projectKey(p.slug)}`}
+                      href={`/?project=${projectKey(p.name)}`}
                       className="hover:underline"
                     >
                       {presentProject(p.name, mode)}
