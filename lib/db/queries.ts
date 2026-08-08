@@ -184,12 +184,41 @@ export type StepRow = {
  */
 const MAX_TEXT = 4000;
 
-export function countSteps(sessionId: string): number {
+/** 타임라인 필터. 한 세션이 4,655스텝까지 나와 에러가 32쪽 중 24쪽에 흩어진다 */
+export type StepFilter = {
+  /** 스텝 종류. 지정하지 않으면 전부 */
+  kind?: string;
+  /** 실패한 툴 결과만 */
+  errorsOnly?: boolean;
+};
+
+/** 필터를 WHERE 조각과 바인딩 값으로 바꾼다 */
+function stepWhere(sessionId: string, f: StepFilter = {}): { sql: string; args: (string | number)[] } {
+  const parts = ["session_id = ?"];
+  const args: (string | number)[] = [sessionId];
+  if (f.kind) {
+    parts.push("kind = ?");
+    args.push(f.kind);
+  }
+  if (f.errorsOnly) parts.push("is_error = 1");
+  return { sql: parts.join(" AND "), args };
+}
+
+export function countSteps(sessionId: string, filter: StepFilter = {}): number {
   const db = getDb();
+  const { sql, args } = stepWhere(sessionId, filter);
   const row = db
-    .prepare("SELECT COUNT(*) AS n FROM steps WHERE session_id = ?")
-    .get(sessionId) as unknown as { n: number };
+    .prepare(`SELECT COUNT(*) AS n FROM steps WHERE ${sql}`)
+    .get(...args) as unknown as { n: number };
   return row.n;
+}
+
+/** 세션에 실제로 존재하는 스텝 종류만 칩으로 세우기 위해 */
+export function stepKindCounts(sessionId: string): { kind: string; n: number }[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT kind, COUNT(*) AS n FROM steps WHERE session_id = ? GROUP BY kind")
+    .all(sessionId) as unknown as { kind: string; n: number }[];
 }
 
 export function getSession(id: string): SessionRow | null {
@@ -198,8 +227,14 @@ export function getSession(id: string): SessionRow | null {
   return row ? toRow(row as unknown as RawSession) : null;
 }
 
-export function listSteps(sessionId: string, offset: number, limit: number): StepRow[] {
+export function listSteps(
+  sessionId: string,
+  offset: number,
+  limit: number,
+  filter: StepFilter = {},
+): StepRow[] {
   const db = getDb();
+  const { sql, args } = stepWhere(sessionId, filter);
   const rows = db
     .prepare(
       `SELECT uuid, seq, kind, timestamp, model,
@@ -211,9 +246,9 @@ export function listSteps(sessionId: string, offset: number, limit: number): Ste
               LENGTH(tool_input)  AS tool_input_len,
               LENGTH(tool_result) AS tool_result_len,
               is_error, output_tokens
-       FROM steps WHERE session_id = ? ORDER BY seq LIMIT ? OFFSET ?`,
+       FROM steps WHERE ${sql} ORDER BY seq LIMIT ? OFFSET ?`,
     )
-    .all(sessionId, limit, offset) as unknown as {
+    .all(...args, limit, offset) as unknown as {
     uuid: string;
     seq: number;
     kind: string;
@@ -457,6 +492,46 @@ export function listTouchedFiles(sessionId: string, limit = 200): TouchedFile[] 
   return rows.map((r) => ({ path: r.file_path, writes: r.writes, reads: r.reads }));
 }
 
+export type SourceStat = {
+  source: string;
+  sessions: number;
+  costUsd: number;
+  outputTokens: number;
+  cacheHitRate: number;
+  toolCalls: number;
+  errors: number;
+  activeMs: number;
+};
+
+/** 에이전트별 비교. 어느 쪽이 세션당 얼마를 쓰는지 보려는 것 */
+export function listSourceStats(): SourceStat[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT source,
+              SUM(CASE WHEN parent_session_id IS NULL THEN 1 ELSE 0 END) AS sessions,
+              SUM(cost_usd)      AS cost_usd,
+              SUM(output_tokens) AS output_tokens,
+              SUM(cache_read)    AS cache_read,
+              SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS prompt_tokens,
+              SUM(tool_call_count) AS tool_calls,
+              SUM(error_count)   AS errors,
+              SUM(active_ms)     AS active_ms
+       FROM sessions GROUP BY source ORDER BY cost_usd DESC`,
+    )
+    .all() as unknown as Record<string, number & string>[];
+  return rows.map((r) => ({
+    source: String(r.source),
+    sessions: Number(r.sessions ?? 0),
+    costUsd: Number(r.cost_usd ?? 0),
+    outputTokens: Number(r.output_tokens ?? 0),
+    cacheHitRate: Number(r.prompt_tokens) ? Number(r.cache_read) / Number(r.prompt_tokens) : 0,
+    toolCalls: Number(r.tool_calls ?? 0),
+    errors: Number(r.errors ?? 0),
+    activeMs: Number(r.active_ms ?? 0),
+  }));
+}
+
 export type ToolStat = {
   toolName: string;
   calls: number;
@@ -529,6 +604,7 @@ export type ProjectStat = {
   costUsd: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheHitRate: number;
   toolCalls: number;
   errors: number;
 };
@@ -543,6 +619,7 @@ export function listProjectStats(): ProjectStat[] {
               SUM(cost_usd)        AS cost_usd,
               SUM(output_tokens)   AS output_tokens,
               SUM(cache_read)      AS cache_read,
+              SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS prompt_tokens,
               SUM(tool_call_count) AS tool_calls,
               SUM(error_count)     AS errors
        FROM sessions GROUP BY project_name ORDER BY cost_usd DESC`,
@@ -554,6 +631,7 @@ export function listProjectStats(): ProjectStat[] {
     cost_usd: number;
     output_tokens: number;
     cache_read: number;
+    prompt_tokens: number;
     tool_calls: number;
     errors: number;
   }[];
@@ -563,6 +641,7 @@ export function listProjectStats(): ProjectStat[] {
     costUsd: r.cost_usd ?? 0,
     outputTokens: r.output_tokens ?? 0,
     cacheReadTokens: r.cache_read ?? 0,
+    cacheHitRate: r.prompt_tokens ? (r.cache_read ?? 0) / r.prompt_tokens : 0,
     toolCalls: r.tool_calls ?? 0,
     errors: r.errors ?? 0,
   }));

@@ -24,13 +24,15 @@ It is not a quota meter. It answers the other question: **where did all of that 
 - **Session list** — active time, tokens, cache hit rate, tool calls, errors, and cost per
   session, filterable by project.
 - **Session timeline** — the full step chain: thinking → tool call → result. Expand raw
-  tool arguments and output, see per-step output tokens and the gap to the next step,
-  spot failed calls, and drill into subagent traces.
+  tool arguments and output, see per-step output tokens and the gap to the next step, and
+  drill into subagent traces. Filter by step kind, or to just the failures — in a
+  4,600-step session the errors are otherwise scattered across two dozen pages.
 - **Outcome tracking** — the PRs a session opened and the files it actually changed. This
   is what turns a log into a record of work.
 - **Full-text search** — search across prompts, tool arguments, and tool output. Ranked by
   relevance, with highlighted snippets that link straight to the step in its timeline.
-- **Aggregates** — tool usage and per-tool failure rate, spend by project, output by model.
+- **Aggregates** — a side-by-side comparison of the agents you use, tool usage and per-tool
+  failure rate, spend and cache hit rate by project, output by model.
 
 "Active" is wall-clock time minus idle. A session you pick up again three days later spans
 429 hours but holds about 3 hours of work; the raw span is shown underneath when the two
