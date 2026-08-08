@@ -1,36 +1,164 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# agent-trace-viewer
 
-## Getting Started
+**See what your coding agents actually did** — tokens, cost, tool calls, and the pull
+requests and files they produced.
 
-First, run the development server:
+Claude Code already writes a complete record of every session to
+`~/.claude/projects/**/*.jsonl`: your prompts, every tool call and its raw output,
+per-model token usage including cache reads and writes, and links to the PRs it opened.
+There is just no way to read any of it.
+
+This is a local viewer for those logs. It adds **no instrumentation** to your agent — it
+only reads what is already on disk.
+
+It is not a quota meter. It answers the other question: **where did all of that go?**
+
+---
+
+## Features
+
+- **Session list** — duration, tokens, cache hit rate, tool calls, errors, and cost per
+  session, filterable by project.
+- **Session timeline** — the full step chain: thinking → tool call → result. Expand raw
+  tool arguments and output, see per-step output tokens and the gap to the next step,
+  spot failed calls, and drill into subagent traces.
+- **Outcome tracking** — the PRs a session opened and the files it actually changed. This
+  is what turns a log into a record of work.
+- **Aggregates** — tool usage and per-tool failure rate, spend by project, output by model.
+
+Cost is computed from per-model rates including the cache multipliers (5-minute cache
+writes at 1.25×, 1-hour at 2×, reads at 0.1×), so the numbers reflect what prompt caching
+actually saved you.
+
+---
+
+## Quick start
+
+### With Node
+
+Requires **Node 22.5 or newer** — the app uses the built-in `node:sqlite`, so there are no
+native modules to compile and no runtime dependencies beyond Next.js and React.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+git clone https://github.com/PYSoYa/agent-trace-viewer.git
+cd agent-trace-viewer
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. It finds your logs automatically and indexes them on first
+load; there is nothing to configure.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### With Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker compose up --build
+```
 
-## Learn More
+Open http://localhost:3000. Compose mounts `~/.claude/projects` **read-only** and keeps the
+parsed index in a named volume.
 
-To learn more about Next.js, take a look at the following resources:
+To point at logs somewhere else, or to use a different port:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+CLAUDE_PROJECTS_DIR=/path/to/logs PORT=8080 docker compose up --build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Both are optional; the defaults work for a normal Claude Code install.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLAUDE_PROJECTS_DIR` | `~/.claude/projects` | Where to read session logs from |
+| `TRACE_DATA_DIR` | `./.data` | Where to keep the parsed index |
+
+The index is a cache. Delete it and it rebuilds from the logs. When the schema changes the
+app detects it via `PRAGMA user_version` and rebuilds automatically, rather than leaving a
+stale cache in place.
+
+---
+
+## Privacy
+
+**Everything stays on your machine.** The app makes no network calls; it reads local files
+and serves a local page.
+
+That said, **the timeline renders raw tool output**, and your logs contain whatever your
+agent saw — source code, file paths, command output, and potentially secrets that appeared
+in a terminal. Two consequences worth knowing:
+
+- Don't expose the server beyond localhost.
+- Take care with screenshots — there is no redaction mode yet.
+
+The test fixtures in this repository are synthetic. No real session data is committed.
+
+---
+
+## How it works
+
+```
+lib/trace/       Source-agnostic trace model + the TraceAdapter interface
+  adapters/      claude-code.ts — the JSONL parser
+lib/db/          Incremental indexer and queries on node:sqlite
+lib/pricing.ts   Per-model rates and cache multipliers
+app/             Next.js App Router pages
+```
+
+Indexing is incremental: a file is re-parsed only when its mtime or size changes, so
+starting the app with tens of megabytes of logs costs milliseconds after the first run.
+
+Parsing sits behind a `TraceAdapter` interface, so another agent's log format needs only a
+new adapter, not changes to the indexer or the UI.
+
+---
+
+## Notes on the log format
+
+Three things about the JSONL are easy to get wrong, and each one produces plausible-looking
+but incorrect numbers rather than an error. They are worth knowing if you plan to parse
+these logs yourself.
+
+**One assistant message spans several lines.** A single response is written as up to four
+lines sharing a `message.id`, and **every one of them repeats the same `usage` object**.
+Summing per line inflates token counts — by 2.5× on the session used to develop this.
+Deduplicate on `message.id`.
+
+**Most of your tokens are attached to thinking blocks.** `usage` rides on the *first* line
+of a message, and that line almost always contains only a `thinking` block. A parser that
+handles just `text` and `tool_use` drops that line, and the usage with it — losing about
+68% of all output tokens. Keep thinking blocks as steps, and carry the usage forward to
+whichever step comes first.
+
+**Subagents share their parent's `sessionId`.** Subagent traces live in a separate file at
+`<session-id>/subagents/agent-*.jsonl`, but the `sessionId` inside is the parent's. Keying
+on it directly makes the subagent overwrite the parent session.
+
+On Opus 5, `thinking.display` defaults to `omitted`, so thinking *content* is recorded as an
+empty string. The token counts survive, so you can see how much a step thought about, just
+not what it thought.
+
+---
+
+## Development
+
+```bash
+pnpm test        # parser and pricing regression tests (node:test)
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+The tests pin the invariants behind the three parsing traps above — most importantly that
+**the sum of per-step tokens equals the session total**. Each was verified by reintroducing
+the original bug and confirming the suite goes red.
+
+Fixtures are hand-written JSONL under `lib/trace/adapters/__fixtures__/`.
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
