@@ -31,7 +31,11 @@ export default async function StatsPage() {
         </Link>
         <DemoToggle mode={mode} />
       </div>
-      <h1 className="mt-4 mb-8 text-xl font-semibold tracking-tight">Stats</h1>
+      <h1 className="mt-4 mb-2 text-xl font-semibold tracking-tight">Stats</h1>
+      <p className="mb-8 text-xs text-neutral-500">
+        All costs are API list-rate equivalents for the tokens consumed. The logs record no
+        billing information, so this cannot tell you what you were actually charged.
+      </p>
 
       {sources.length > 1 && (
         <section className="mb-10">
@@ -48,10 +52,10 @@ export default async function StatsPage() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-neutral-500">
                   <dt>Sessions</dt>
                   <dd className="text-right tabular-nums">{s.sessions}</dd>
-                  <dt>Cost</dt>
+                  <dt>API-rate cost</dt>
                   <dd className="text-right tabular-nums">{formatUsd(s.costUsd)}</dd>
                   {/* 세션 하나에 얼마를 쓰는지가 두 에이전트를 비교하는 가장 직접적인 값이다 */}
-                  <dt>Cost / session</dt>
+                  <dt>Per session</dt>
                   <dd className="text-right tabular-nums">
                     {formatUsd(s.sessions ? s.costUsd / s.sessions : 0)}
                   </dd>
@@ -128,7 +132,7 @@ export default async function StatsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">Spend by project</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">Usage by project</h2>
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full text-sm">
             <thead>
@@ -141,7 +145,7 @@ export default async function StatsPage() {
                 <th className="px-4 py-2.5 text-right font-medium">Hit rate</th>
                 <th className="px-4 py-2.5 text-right font-medium">Tools</th>
                 <th className="px-4 py-2.5 text-right font-medium">Errors</th>
-                <th className="px-4 py-2.5 text-right font-medium">Cost</th>
+                <th className="px-4 py-2.5 text-right font-medium">API cost</th>
               </tr>
             </thead>
             <tbody>

@@ -81,7 +81,7 @@ export default async function SessionListPage({
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Stat label="Sessions" value={String(sessions.length)} />
-        <Stat label="Cost" value={formatUsd(totalCost)} />
+        <Stat label="API-rate cost" value={formatUsd(totalCost)} />
         <Stat label="Output tokens" value={formatTokens(totalOutput)} />
         <Stat
           label="Cache hit rate"
@@ -89,6 +89,12 @@ export default async function SessionListPage({
         />
         <Stat label="Tool calls" value={formatTokens(totalTools)} />
       </section>
+
+      {/* 로그에는 결제 방식이 남지 않는다. 구독으로 썼다면 실제 지불액이 아니다 */}
+      <p className="mb-6 text-xs text-neutral-500">
+        Cost is what these tokens would bill at API list rates. If you use a subscription
+        plan, this is not what you paid — read it as the value of what you consumed.
+      </p>
 
       <nav className="mb-6 flex flex-wrap gap-2">
         <FilterChip href="/" active={!project} label="All" />
@@ -120,7 +126,7 @@ export default async function SessionListPage({
                 <th className="px-4 py-3 text-right font-medium">Cache</th>
                 <th className="px-4 py-3 text-right font-medium">Tools</th>
                 <th className="px-4 py-3 text-right font-medium">Errors</th>
-                <th className="px-4 py-3 text-right font-medium">Cost</th>
+                <th className="px-4 py-3 text-right font-medium">API cost</th>
               </tr>
             </thead>
             <tbody>

@@ -34,14 +34,20 @@ It is not a quota meter. It answers the other question: **where did all of that 
 - **Aggregates** — a side-by-side comparison of the agents you use, tool usage and per-tool
   failure rate, spend and cache hit rate by project, output by model.
 
+**Cost is an API list-rate equivalent, not your bill.** The logs record token counts, not
+billing: nothing in them says whether a session ran against a metered API key or a flat-rate
+subscription. So the figure answers "what would these tokens have cost at published API
+rates" — which is the right question for comparing sessions, projects, and agents to each
+other, and for deciding whether a subscription is paying for itself. It is not what you were
+charged.
+
 "Active" is wall-clock time minus idle. A session you pick up again three days later spans
 429 hours but holds about 3 hours of work; the raw span is shown underneath when the two
 diverge. The threshold is 5 minutes, chosen by measuring: between 5 and 15 minutes the
 totals barely move, so short gaps and real idle separate cleanly there.
 
-Cost is computed from per-model rates including the cache multipliers (5-minute cache
-writes at 1.25×, 1-hour at 2×, reads at 0.1×), so the numbers reflect what prompt caching
-actually saved you.
+Rates are per model and include the cache multipliers (5-minute cache writes at 1.25×,
+1-hour at 2×, reads at 0.1×), so the numbers reflect what prompt caching actually saved.
 
 ---
 

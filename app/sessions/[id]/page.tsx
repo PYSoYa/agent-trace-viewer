@@ -94,7 +94,7 @@ export default async function SessionTimelinePage({
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="Cost" value={formatUsd(session.totalCostUsd)} />
+        <Stat label="API-rate cost" value={formatUsd(session.totalCostUsd)} />
         <Stat label="Output tokens" value={formatTokens(session.tokens.output)} />
         <Stat label="Cache hit rate" value={formatPercent(session.cacheHitRate)} />
         <Stat label="Tool calls" value={String(session.toolCallCount)} />
