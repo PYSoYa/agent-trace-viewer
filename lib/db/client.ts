@@ -2,7 +2,8 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const DATA_DIR = join(process.cwd(), ".data");
+/** 인덱스 저장 위치. 컨테이너에서는 볼륨을 붙여 재시작해도 남게 한다 */
+const DATA_DIR = process.env.TRACE_DATA_DIR || join(process.cwd(), ".data");
 const DB_PATH = join(DATA_DIR, "traces.db");
 
 const SCHEMA = `

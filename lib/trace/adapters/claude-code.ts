@@ -14,7 +14,12 @@ import {
   type TraceStep,
 } from "../types";
 
-const DEFAULT_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+/**
+ * 로그 위치. 컨테이너에서는 호스트의 디렉터리를 읽기 전용으로 마운트하고
+ * CLAUDE_PROJECTS_DIR로 그 경로를 알려준다.
+ */
+const DEFAULT_PROJECTS_DIR =
+  process.env.CLAUDE_PROJECTS_DIR || join(homedir(), ".claude", "projects");
 
 /** 사용자가 실제로 친 프롬프트가 아니라 CLI가 끼워 넣은 메타 텍스트 */
 const META_PROMPT_PREFIXES = [

@@ -1,95 +1,164 @@
 # agent-trace-viewer
 
-에이전트 세션 로그를 읽어 **뭘 하느라 토큰을 썼는지** 보여주는 로컬 뷰어.
+**See what your coding agents actually did** — tokens, cost, tool calls, and the pull
+requests and files they produced.
 
-Claude Code는 세션마다 `~/.claude/projects/**/*.jsonl`에 전체 실행 기록을 남긴다.
-프롬프트, 툴 호출과 그 결과 원문, 모델별 토큰(캐시 read/write 포함), 파일 변경까지 전부 들어 있는데
-정작 그걸 읽을 방법이 없다. 이 프로젝트는 **계측 코드를 한 줄도 추가하지 않고**
-이미 쌓여 있는 로그만으로 세션 단위 비용·툴 사용·실패 지점을 집계한다.
+Claude Code already writes a complete record of every session to
+`~/.claude/projects/**/*.jsonl`: your prompts, every tool call and its raw output,
+per-model token usage including cache reads and writes, and links to the PRs it opened.
+There is just no way to read any of it.
 
-남은 사용량을 보는 도구가 아니라, **쓴 사용량의 내역**을 보는 도구다.
+This is a local viewer for those logs. It adds **no instrumentation** to your agent — it
+only reads what is already on disk.
 
-## 화면
+It is not a quota meter. It answers the other question: **where did all of that go?**
 
-- **세션 목록** — 프로젝트/브랜치별로 기간, 토큰, 캐시 히트율, 툴 호출 수, 에러 수, 비용
-- **세션 타임라인** — 사고 → 툴 호출 → 결과로 이어지는 스텝 체인. 인자와 결과 원문 펼치기,
-  스텝별 출력 토큰과 다음 스텝까지의 간격, 에러 하이라이트, 서브에이전트 드릴다운
-- **결과물 추적** — 세션이 만든 PR과 실제로 변경한 파일. 로그를 "무슨 일이 있었나"에서
-  "무엇이 만들어졌나"로 잇는 부분이다
-- **집계** — 툴별 호출량과 실패율, 프로젝트별 소비, 모델별 출력
+---
 
-## 실행
+## Features
+
+- **Session list** — duration, tokens, cache hit rate, tool calls, errors, and cost per
+  session, filterable by project.
+- **Session timeline** — the full step chain: thinking → tool call → result. Expand raw
+  tool arguments and output, see per-step output tokens and the gap to the next step,
+  spot failed calls, and drill into subagent traces.
+- **Outcome tracking** — the PRs a session opened and the files it actually changed. This
+  is what turns a log into a record of work.
+- **Aggregates** — tool usage and per-tool failure rate, spend by project, output by model.
+
+Cost is computed from per-model rates including the cache multipliers (5-minute cache
+writes at 1.25×, 1-hour at 2×, reads at 0.1×), so the numbers reflect what prompt caching
+actually saved you.
+
+---
+
+## Quick start
+
+### With Node
+
+Requires **Node 22.5 or newer** — the app uses the built-in `node:sqlite`, so there are no
+native modules to compile and no runtime dependencies beyond Next.js and React.
 
 ```bash
+git clone https://github.com/PYSoYa/agent-trace-viewer.git
+cd agent-trace-viewer
 pnpm install
 pnpm dev
 ```
 
+Open http://localhost:3000. It finds your logs automatically and indexes them on first
+load; there is nothing to configure.
+
+### With Docker
+
 ```bash
-pnpm test       # 파서·단가 회귀 테스트 (node:test)
+docker compose up --build
+```
+
+Open http://localhost:3000. Compose mounts `~/.claude/projects` **read-only** and keeps the
+parsed index in a named volume.
+
+To point at logs somewhere else, or to use a different port:
+
+```bash
+CLAUDE_PROJECTS_DIR=/path/to/logs PORT=8080 docker compose up --build
+```
+
+---
+
+## Configuration
+
+Both are optional; the defaults work for a normal Claude Code install.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLAUDE_PROJECTS_DIR` | `~/.claude/projects` | Where to read session logs from |
+| `TRACE_DATA_DIR` | `./.data` | Where to keep the parsed index |
+
+The index is a cache. Delete it and it rebuilds from the logs. When the schema changes the
+app detects it via `PRAGMA user_version` and rebuilds automatically, rather than leaving a
+stale cache in place.
+
+---
+
+## Privacy
+
+**Everything stays on your machine.** The app makes no network calls; it reads local files
+and serves a local page.
+
+That said, **the timeline renders raw tool output**, and your logs contain whatever your
+agent saw — source code, file paths, command output, and potentially secrets that appeared
+in a terminal. Two consequences worth knowing:
+
+- Don't expose the server beyond localhost.
+- Take care with screenshots — there is no redaction mode yet.
+
+The test fixtures in this repository are synthetic. No real session data is committed.
+
+---
+
+## How it works
+
+```
+lib/trace/       Source-agnostic trace model + the TraceAdapter interface
+  adapters/      claude-code.ts — the JSONL parser
+lib/db/          Incremental indexer and queries on node:sqlite
+lib/pricing.ts   Per-model rates and cache multipliers
+app/             Next.js App Router pages
+```
+
+Indexing is incremental: a file is re-parsed only when its mtime or size changes, so
+starting the app with tens of megabytes of logs costs milliseconds after the first run.
+
+Parsing sits behind a `TraceAdapter` interface, so another agent's log format needs only a
+new adapter, not changes to the indexer or the UI.
+
+---
+
+## Notes on the log format
+
+Three things about the JSONL are easy to get wrong, and each one produces plausible-looking
+but incorrect numbers rather than an error. They are worth knowing if you plan to parse
+these logs yourself.
+
+**One assistant message spans several lines.** A single response is written as up to four
+lines sharing a `message.id`, and **every one of them repeats the same `usage` object**.
+Summing per line inflates token counts — by 2.5× on the session used to develop this.
+Deduplicate on `message.id`.
+
+**Most of your tokens are attached to thinking blocks.** `usage` rides on the *first* line
+of a message, and that line almost always contains only a `thinking` block. A parser that
+handles just `text` and `tool_use` drops that line, and the usage with it — losing about
+68% of all output tokens. Keep thinking blocks as steps, and carry the usage forward to
+whichever step comes first.
+
+**Subagents share their parent's `sessionId`.** Subagent traces live in a separate file at
+`<session-id>/subagents/agent-*.jsonl`, but the `sessionId` inside is the parent's. Keying
+on it directly makes the subagent overwrite the parent session.
+
+On Opus 5, `thinking.display` defaults to `omitted`, so thinking *content* is recorded as an
+empty string. The token counts survive, so you can see how much a step thought about, just
+not what it thought.
+
+---
+
+## Development
+
+```bash
+pnpm test        # parser and pricing regression tests (node:test)
 pnpm typecheck
 pnpm lint
+pnpm build
 ```
 
-`~/.claude/projects` 아래 jsonl을 자동으로 찾아 인덱싱한다. 별도 설정은 없다.
-인덱스는 `.data/traces.db`(gitignore)에 저장되고, 파일 mtime·크기가 바뀐 것만 다시 파싱한다.
-스키마가 바뀌면 `PRAGMA user_version`으로 감지해 캐시를 버리고 새로 만든다 — jsonl에서
-언제든 복원할 수 있는 파생물이라, 어긋난 채로 두는 것보다 다시 만드는 쪽이 안전하다.
+The tests pin the invariants behind the three parsing traps above — most importantly that
+**the sum of per-step tokens equals the session total**. Each was verified by reintroducing
+the original bug and confirming the suite goes red.
 
-## 구조
+Fixtures are hand-written JSONL under `lib/trace/adapters/__fixtures__/`.
 
-```
-lib/trace/     어댑터 중립 트레이스 모델 + TraceAdapter 인터페이스
-  adapters/    claude-code.ts — jsonl 파서 (첫 구현)
-lib/db/        node:sqlite 기반 증분 인덱서와 조회
-lib/pricing.ts 모델별 단가와 캐시 배수
-app/           Next.js App Router 화면
-```
+---
 
-파서는 `TraceAdapter` 뒤에 있어서, 다른 에이전트 로그(Codex 등)는 어댑터만 추가하면 붙는다.
-SQLite는 Node 내장 `node:sqlite`를 써서 네이티브 의존성이 없다.
+## License
 
-## 로그 파싱에서 주의한 것
-
-실제 데이터를 넣어보고 나서야 드러난 두 가지.
-
-**assistant 메시지는 여러 줄로 쪼개져 있다.** 한 응답이 `message.id`를 공유하는 최대 4줄로 나뉘어
-기록되고, 각 줄이 **같은 usage 객체를 그대로 반복**한다. 줄 단위로 더하면 토큰이 2.5배 부풀려진다
-(검증 세션 실제 output 220,981 → 순진하게 합산 시 550,600). `message.id` 기준으로 중복을 제거한다.
-
-**서브에이전트는 부모와 sessionId가 같다.** 서브에이전트 로그는
-`<세션ID>/subagents/agent-*.jsonl`에 따로 저장되는데 내부 `sessionId`가 부모와 동일해서,
-그대로 넣으면 기본키 충돌로 부모 세션 행을 덮어쓴다. 합성 ID와 `parent_session_id`로 분리하고
-목록에서는 부모 비용에 롤업한다.
-
-**토큰의 68%가 사고 블록에 실려 있다.** `usage`는 메시지 단위로 그 메시지의 **첫 줄**에 실리는데,
-첫 줄은 거의 항상 `thinking` 블록이다. 사고 블록을 스텝으로 만들지 않으면 그 줄이 통째로 버려져
-스텝 단위 토큰 집계가 실제의 3분의 1로 떨어진다(4.27M → 1.34M). 사고 블록도 스텝으로 남기고,
-usage는 그 메시지에서 처음 만들어지는 스텝까지 들고 가서 붙인다. 지금은 스텝 합계와 세션 합계가
-정확히 일치한다.
-
-Opus 5는 `thinking.display` 기본값이 `omitted`라 사고 **내용**은 빈 문자열로 기록된다.
-토큰 수는 남으므로, 내용 없이 "얼마나 생각했는지"만 볼 수 있다.
-
-## 테스트
-
-위 세 가지는 모두 **에러 없이 그럴듯한 숫자**를 내놓는 종류였다. 그래서 합성 픽스처로
-불변식을 고정해뒀다 — 특히 **스텝 토큰 합계 == 세션 토큰 합계**가 핵심이다.
-
-테스트가 실제로 이빨이 있는지 확인하려고 고친 버그를 하나씩 되살려 봤고, 넷 다 잡혔다.
-
-| 되살린 버그 | 깨지는 테스트 |
-|---|---|
-| `message.id` 중복 제거 제거 | 4개 |
-| 사고 블록 스텝화 제거 | 3개 |
-| 서브에이전트 합성 ID 제거 | 1개 |
-| usage를 스텝에 안 붙임 | 2개 (합계 불변식 포함) |
-
-픽스처는 실제 로그가 아니라 손으로 만든 것이다. 실제 세션 로그에는 업무 내용이 들어 있어
-저장소에 넣지 않는다.
-
-## 상태
-
-세션 목록 · 타임라인 · 집계가 동작한다.
-실제 로그 21개 파일(62MB) 기준 세션 21개 · 스텝 15,221개가 인덱싱되고,
-스텝 토큰 합계가 세션 토큰 합계와 오차 없이 맞는다.
+MIT — see [LICENSE](./LICENSE).

@@ -1,0 +1,18 @@
+services:
+  agent-trace-viewer:
+    build: .
+    image: agent-trace-viewer
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Your Claude Code logs, mounted read-only — the viewer never writes here.
+      - ${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}:/claude-projects:ro
+      # The parsed index. Delete this volume to force a full re-parse.
+      - trace-index:/data
+    environment:
+      CLAUDE_PROJECTS_DIR: /claude-projects
+      TRACE_DATA_DIR: /data
+    restart: unless-stopped
+
+volumes:
+  trace-index:
