@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-trace-viewer — 코딩 에이전트가 실제로 무엇을 했는지 본다</title>
+<meta name="description" content="Claude Code와 Codex가 디스크에 남기는 세션 로그를 읽어 토큰·비용·도구 호출·산출물을 보여주는 로컬 뷰어입니다.">
+<style>
+:root { color-scheme: light dark; --fg:#111827; --dim:#6b7280; --accent:#0ea5e9; --line:#e5e7eb; --bg:#fff; }
+@media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --dim:#9ca3af; --accent:#38bdf8; --line:#374151; --bg:#0b0f19; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+  font:16px/1.7 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+main { max-width: 780px; margin: 0 auto; padding: 56px 20px 100px; }
+h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.02em; }
+h2 { font-size: 20px; margin: 44px 0 12px; letter-spacing: -0.01em; }
+.lead { font-size: 18px; color: var(--dim); margin: 0 0 28px; }
+.links { display:flex; flex-wrap:wrap; gap:10px; }
+.links a { display:inline-block; padding:8px 14px; border:1px solid var(--line); border-radius:8px;
+  text-decoration:none; color:var(--fg); font-size:14px; }
+.links a.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+pre { background: color-mix(in srgb, var(--fg) 6%, transparent); padding:14px 16px;
+  border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.6; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+table { border-collapse:collapse; width:100%; font-size:14px; margin:12px 0; }
+th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--dim); font-weight:600; }
+blockquote { margin:16px 0; padding:12px 18px; border-left:3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius:0 8px 8px 0; }
+.dim { color:var(--dim); font-size:14px; }
+ul { padding-left: 20px; }
+li { margin: 6px 0; }
+footer { margin-top:64px; padding-top:20px; border-top:1px solid var(--line); color:var(--dim); font-size:13px; }
+</style>
+<body>
+<main>
+  <h1>agent-trace-viewer</h1>
+  <p class="lead">
+    코딩 에이전트가 <strong>실제로 무엇을 했는지</strong> 봅니다 —<br>
+    토큰, 비용, 도구 호출, 그리고 그 결과로 만들어진 PR과 파일.
+  </p>
+
+  <div class="links">
+    <a class="primary" href="https://github.com/PYSoYa/agent-trace-viewer">GitHub 저장소</a>
+    <a href="https://github.com/PYSoYa/agent-trace-viewer#quick-start">설치 방법</a>
+  </div>
+
+  <blockquote>
+    <strong>로컬에서 실행하는 도구입니다.</strong>
+    내 컴퓨터에 이미 쌓여 있는 로그를 읽기 때문에, 이 페이지는 소개용이고
+    실제 화면은 각자 머신에서 띄웁니다. 로그가 외부로 나가지 않습니다.
+  </blockquote>
+
+  <h2>왜 만들었나</h2>
+  <p>
+    Claude Code와 Codex는 모든 세션을 디스크에 완전히 기록합니다 —
+    프롬프트, 도구 호출과 그 원본 출력, 캐시 읽기를 포함한 모델별 토큰 사용량,
+    그리고 에이전트가 연 PR까지. <strong>그런데 그걸 읽을 방법이 없습니다.</strong>
+  </p>
+  <table>
+    <tr><th>에이전트</th><th>로그 위치</th></tr>
+    <tr><td>Claude Code</td><td><code>~/.claude/projects/**/*.jsonl</code></td></tr>
+    <tr><td>Codex</td><td><code>~/.codex/sessions/**/rollout-*.jsonl</code></td></tr>
+  </table>
+  <p>
+    에이전트에 <strong>계측을 추가하지 않습니다.</strong> 이미 디스크에 있는 것만 읽습니다.
+    쿼터 미터가 아니라 다른 질문에 답합니다 — <strong>그 많은 토큰이 어디로 갔는가.</strong>
+  </p>
+
+  <h2>기능</h2>
+  <ul>
+    <li><strong>세션 목록</strong> — 활동 시간, 토큰, 캐시 적중률, 도구 호출, 오류, 세션당 비용. 프로젝트별 필터.</li>
+    <li><strong>세션 타임라인</strong> — 사고 → 도구 호출 → 결과의 전체 사슬.
+      원본 인자와 출력을 펼쳐 보고, 단계별 출력 토큰과 다음 단계까지의 공백을 확인하고,
+      서브에이전트 트레이스로 파고듭니다.
+      <span class="dim">4,600단계짜리 세션에서 오류는 스무 페이지에 흩어져 있어, 실패만 걸러 보는 필터가 필요합니다.</span></li>
+    <li><strong>산출물 추적</strong> — 그 세션이 연 PR과 실제로 바꾼 파일.
+      <span class="dim">로그를 “작업 기록”으로 바꿔주는 부분입니다.</span></li>
+    <li><strong>전문 검색</strong> — 프롬프트·도구 인자·도구 출력을 가로질러 검색.
+      관련도 순 정렬과 하이라이트에서 해당 단계로 바로 이동.</li>
+    <li><strong>집계</strong> — 사용하는 에이전트 간 비교, 도구별 사용량과 실패율,
+      프로젝트별 지출과 캐시 적중률, 모델별 출력량.</li>
+  </ul>
+
+  <h2>숫자를 정직하게 다루는 방식</h2>
+  <p>
+    <strong>비용은 API 정가 환산이지 청구액이 아닙니다.</strong>
+    로그에는 토큰 수만 있고 과금 정보가 없습니다 — 종량제 키였는지 정액 구독이었는지
+    로그는 모릅니다. 그래서 “이 토큰이 공개 API 요율이었다면 얼마였을까”에 답합니다.
+    세션·프로젝트·에이전트를 서로 비교하거나 구독이 본전을 뽑는지 판단할 때 맞는 질문이고,
+    <strong>실제로 청구된 금액은 아닙니다.</strong>
+  </p>
+  <p>
+    <strong>“활동 시간”은 벽시계 시간에서 유휴를 뺀 값입니다.</strong>
+    사흘 뒤에 다시 이어붙인 세션은 429시간에 걸쳐 있지만 실제 작업은 3시간쯤입니다.
+    임계값 5분은 재서 정했습니다 — 5분과 15분 사이에서 총합이 거의 움직이지 않아,
+    짧은 공백과 진짜 유휴가 그 지점에서 깨끗하게 갈립니다.
+  </p>
+  <p>
+    요율은 모델별이며 <strong>캐시 배수를 포함</strong>합니다
+    (5분 캐시 쓰기 1.25×, 1시간 2×, 읽기 0.1×).
+    프롬프트 캐싱이 실제로 얼마를 아꼈는지가 숫자에 반영됩니다.
+  </p>
+
+  <h2>실행</h2>
+<pre><code>git clone https://github.com/PYSoYa/agent-trace-viewer.git
+cd agent-trace-viewer
+pnpm install &amp;&amp; pnpm dev</code></pre>
+  <p class="dim">
+    <code>http://localhost:3000</code>. 로그를 자동으로 찾아 첫 로드에 색인합니다.
+    설정할 것이 없습니다. Node 22.5 이상이면 내장 <code>node:sqlite</code>를 쓰므로
+    네이티브 모듈 컴파일도 없습니다.
+  </p>
+  <p class="dim">
+    Docker로도 실행할 수 있습니다. 로그는 <strong>읽기 전용</strong>으로 마운트하고,
+    <code>~/.codex</code>는 통째로 마운트하지 않습니다 —
+    그 안에 <code>auth.json</code>이 있고, 트레이스를 읽자고 컨테이너에
+    자격증명을 넘길 이유는 없습니다.
+  </p>
+
+  <footer>
+    박윤석 · <a href="https://github.com/PYSoYa/agent-trace-viewer">github.com/PYSoYa/agent-trace-viewer</a>
+  </footer>
+</main>
+</body>
+</html>
